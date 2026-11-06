@@ -46,7 +46,7 @@ Windows 托盘小工具：直接在任务栏里显示无线键盘 / 鼠标的电
 | 设备 | 接收器 | 协议 | 状态 |
 | --- | --- | --- | --- |
 | 迈从 MCHOSE K99 V2 | 2.4G，VID `0x05AC` / PID `0x024F` | 厂商自定义 HID Feature Report：ID `0x13`、命令 `0x4A`、末字节校验和；`report[5]` 为百分比，`report[6]` 高半字节为充电标志 | 已实测 |
-| 罗技 G304 / GPW2 等 Lightspeed、Unifying | VID `0x046D`，Usage Page `0xFF00` / Usage `0x0002` | HID++ 2.0：优先 Feature `0x1000`（直接给百分比），无该 feature 时退回 `0x1004` function 1 | 代码已实现，**未拿到接收器实测** |
+| 罗技 G304 / GPW2 等 Lightspeed、Unifying | VID `0x046D`，Usage Page `0xFF00` / Usage `0x0002` | HID++ 2.0：优先 Feature `0x1000`（直接给百分比），无该 feature 时退回 `0x1004` function 1 | GPW2 已实测可读出电量；其余型号按同一路径实现，未逐款验证 |
 
 只走 2.4G 接收器，不支持蓝牙。读 HID 不需要管理员权限，也不需要装驱动。
 
