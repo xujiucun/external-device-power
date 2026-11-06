@@ -1,0 +1,19 @@
+﻿046D:C08B  OK  G502 HERO K/DA
+046D:C08B  OK  HID Keyboard Device
+046D:C08B  OK  HID-compliant mouse
+046D:C08B  OK  USB 输入设备
+046D:C08B  OK  符合 HID 标准的供应商定义设备
+046D:C08B  OK  符合 HID 标准的系统控制器
+046D:C08B  OK  符合 HID 标准的用户控制设备
+046D:C232  OK  HID Keyboard Device
+046D:C232  OK  Logitech G HUB Virtual Keyboard
+05AC:024F  OK  HID Keyboard Device
+05AC:024F  OK  HID-compliant mouse
+05AC:024F  OK  USB Composite Device
+05AC:024F  OK  USB 输入设备
+05AC:024F  OK  符合 HID 标准的供应商定义设备
+05AC:024F  OK  符合 HID 标准的系统控制器
+05AC:024F  OK  符合 HID 标准的用户控制设备
+2717:FF48  OK  ADB Interface
+2717:FF48  OK  Redmi Note 9
+2717:FF48  OK  USB Composite Device

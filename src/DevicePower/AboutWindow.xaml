@@ -1,0 +1,200 @@
+<Window x:Class="DevicePower.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="关于"
+        Icon="pack://application:,,,/Assets/hlogo.ico"
+        Width="480"
+        SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="True"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        FontFamily="Microsoft YaHei UI"
+        FontSize="14"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+    <Window.Resources>
+        <Style x:Key="GhostButton" TargetType="Button">
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="Foreground" Value="#EAECEF" />
+            <Setter Property="Background" Value="#1FFFFFFF" />
+            <Setter Property="BorderBrush" Value="#33FFFFFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="14,7" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="9"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#33FFFFFF" />
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="#52FFFFFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#12FFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="IconButton" TargetType="Button" BasedOn="{StaticResource GhostButton}">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Foreground" Value="#B3FFFFFF" />
+        </Style>
+
+        <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#7C828B" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="RuleStyle" TargetType="Border">
+            <Setter Property="Height" Value="1" />
+            <Setter Property="Background" Value="#1CFFFFFF" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="12,0,0,0" />
+        </Style>
+
+        <Style x:Key="KeyStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#A2A7AF" />
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="ValueStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#DEE1E6" />
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </Window.Resources>
+
+    <Border CornerRadius="18"
+            Background="#FA202020"
+            BorderBrush="#38FFFFFF"
+            BorderThickness="1"
+            Padding="28,22"
+            Margin="18">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="32" ShadowDepth="9" Opacity="0.55" Color="Black" />
+        </Border.Effect>
+        <StackPanel>
+            <Grid Background="Transparent" MouseLeftButtonDown="Header_MouseLeftButtonDown" Margin="0,0,0,2">
+                <TextBlock Text="关于" FontSize="21" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" />
+                <Button Content="✕" Width="32" Height="32" HorizontalAlignment="Right"
+                        Style="{StaticResource IconButton}" Click="Close_Click" />
+            </Grid>
+
+            <Grid Margin="0,10,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Image Source="pack://application:,,,/Assets/hlogo.ico"
+                       Width="46" Height="46" VerticalAlignment="Top" Margin="0,0,16,0" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="外设电量" FontSize="19" FontWeight="SemiBold" Foreground="White" />
+                    <TextBlock x:Name="VersionText" Foreground="#A2A7AF" FontSize="13.5" Margin="0,3,0,0" />
+                </StackPanel>
+            </Grid>
+
+            <Grid Margin="0,16,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="功能" Style="{StaticResource SectionTitleStyle}" />
+                <Border Grid.Column="1" Style="{StaticResource RuleStyle}" />
+            </Grid>
+
+            <TextBlock Style="{StaticResource ValueStyle}" Margin="0,0,0,6"
+                       Text="· 实时显示 2.4G 接收器外设的电量，不依赖厂商客户端" />
+            <TextBlock Style="{StaticResource ValueStyle}" Margin="0,0,0,6"
+                       Text="· 任务栏内嵌电量条 / 浮动面板两种显示，一列最多两台" />
+            <TextBlock Style="{StaticResource ValueStyle}" Margin="0,0,0,6"
+                       Text="· 低电量、极低电量两档阈值，跌破时右下角弹窗提醒" />
+            <TextBlock Style="{StaticResource ValueStyle}" Margin="0,0,0,6"
+                       Text="· 文字颜色、大小、粗细、排版与电量图形样式可自定义" />
+            <TextBlock Style="{StaticResource ValueStyle}" Margin="0,0,0,14"
+                       Text="· 读数直接来自设备固件，不做平滑，充电时可能比实际偏高" />
+
+            <Grid Margin="0,4,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="仓库" Style="{StaticResource SectionTitleStyle}" />
+                <Border Grid.Column="1" Style="{StaticResource RuleStyle}" />
+            </Grid>
+
+            <Grid Margin="0,0,0,14">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="RepoText" Style="{StaticResource ValueStyle}"
+                           TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                <Button Grid.Column="1" Content="复制地址" Margin="0,0,8,0"
+                        Style="{StaticResource GhostButton}" Click="Copy_Click" />
+                <TextBlock Grid.Column="2" x:Name="CopyHint" Style="{StaticResource KeyStyle}" Text="GitHub 仓库" />
+            </Grid>
+
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="运行信息" Style="{StaticResource SectionTitleStyle}" />
+                <Border Grid.Column="1" Style="{StaticResource RuleStyle}" />
+            </Grid>
+
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="88" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="设备支持" Style="{StaticResource KeyStyle}" />
+                <TextBlock Grid.Column="1" Style="{StaticResource ValueStyle}"
+                           Text="迈从 K99 V2（已实测）· 罗技 Lightspeed（待实测）" />
+            </Grid>
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="88" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="运行环境" Style="{StaticResource KeyStyle}" />
+                <TextBlock Grid.Column="1" x:Name="RuntimeText" Style="{StaticResource ValueStyle}" />
+            </Grid>
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="88" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="程序位置" Style="{StaticResource KeyStyle}" />
+                <TextBlock Grid.Column="1" x:Name="PathText" Style="{StaticResource ValueStyle}"
+                           FontSize="12.5" Foreground="#8E939B" />
+            </Grid>
+
+            <Border Height="1" Background="#1CFFFFFF" Margin="0,16,0,14" />
+            <Button Content="关闭" Width="96" Height="38" HorizontalAlignment="Right"
+                    Style="{StaticResource GhostButton}" Click="Close_Click" />
+        </StackPanel>
+    </Border>
+</Window>

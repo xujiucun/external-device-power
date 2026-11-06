@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+    <AssemblyName>DevicePower</AssemblyName>
+    <RootNamespace>DevicePower</RootNamespace>
+    <Version>0.0.1</Version>
+    <RollForward>LatestMajor</RollForward>
+    <ApplicationIcon>Assets\hlogo.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="Assets\tray.ico" CopyToOutputDirectory="PreserveNewest" />
+    <Resource Include="Assets\hlogo.ico" />
+  </ItemGroup>
+
+</Project>

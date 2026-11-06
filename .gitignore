@@ -1,0 +1,27 @@
+# 构建产物
+bin/
+obj/
+publish/
+publish-selfcontained/
+dist/
+.vs/
+*.user
+
+# 运行期产物
+*.log
+
+# 开发期的验证脚本、截图、临时渲染工程（53MB，和程序无关）
+.scratch/
+
+# 调研抓下来的网页/参考站缓存（约 10MB）
+.webref/
+
+# 任务栏窗口的 UIA 结构快照（128KB，需要的话手动 git add -f）
+.tm-tree.json
+
+# 下面这些是逆向过程的原始记录（本项目自己的产物），体积很小，想留作文档就保持现状；不想提交就取消注释
+# .probe*
+
+# 第三方参考代码与别人项目的文档副本，不要混进本仓库（许可证风险）
+.tmref/
+.ref-dsh-readme.md

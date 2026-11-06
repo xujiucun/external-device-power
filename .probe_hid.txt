@@ -1,0 +1,4 @@
+﻿=== All present HID device interfaces, with iProduct / iManufacturer / iSerial ===
+ENUM-STOP i=0 err=259 sizeof(SPDID)=40
+
+=== filtered: 05AC ===

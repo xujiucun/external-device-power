@@ -1,0 +1,37 @@
+﻿=== 1. USB devices with VID/PID (keyboard + 2.4G dongle live here) ===
+
+=== 2. HIDClass devices full InstanceId (look for vendor-defined collections) ===
+OK  |  HID\VID_046D&PID_C08B&MI_01&COL02\7&2595893D&0&0001  |  符合 HID 标准的用户控制设备
+OK  |  USB\VID_05AC&PID_024F&MI_01\6&A9EF9AE&0&0001  |  USB 输入设备
+OK  |  USB\VID_05AC&PID_024F&MI_00\6&A9EF9AE&0&0000  |  USB 输入设备
+Unknown  |  HID\VID_05AC&PID_024F&MI_01&COL03\7&1A9E5D2B&0&0002  |  符合 HID 标准的供应商定义设备
+OK  |  LGHUBDEVICE\VID_046D&PID_C232\1&1A590E2C&0&01  |  Logitech G HUB Virtual Keyboard
+OK  |  HID\VID_046D&PID_C08B&MI_01&COL03\7&2595893D&0&0002  |  符合 HID 标准的系统控制器
+OK  |  HID\VID_046D&PID_C08B&MI_01&COL04\7&2595893D&0&0003  |  符合 HID 标准的供应商定义设备
+Unknown  |  USB\VID_05AC&PID_024F&MI_00\6&1FAA27D4&0&0000  |  USB 输入设备
+OK  |  HID\VID_05AC&PID_024F&MI_01&COL01\7&26453AF0&0&0000  |  符合 HID 标准的供应商定义设备
+OK  |  HID\VID_05AC&PID_024F&MI_01&COL06\7&26453AF0&0&0005  |  符合 HID 标准的供应商定义设备
+Unknown  |  HID\VID_05AC&PID_024F&MI_01&COL05\7&1A9E5D2B&0&0004  |  符合 HID 标准的供应商定义设备
+OK  |  HID\VID_046D&PID_C08B&MI_01&COL05\7&2595893D&0&0004  |  符合 HID 标准的供应商定义设备
+Unknown  |  USB\VID_05AC&PID_024F&MI_01\6&1FAA27D4&0&0001  |  USB 输入设备
+OK  |  HID\VID_05AC&PID_024F&MI_01&COL02\7&26453AF0&0&0001  |  符合 HID 标准的用户控制设备
+Unknown  |  HID\VID_05AC&PID_024F&MI_01&COL01\7&1A9E5D2B&0&0000  |  符合 HID 标准的系统控制器
+Unknown  |  HID\VID_05AC&PID_024F&MI_01&COL06\7&1A9E5D2B&0&0005  |  符合 HID 标准的供应商定义设备
+OK  |  USB\VID_046D&PID_C08B&MI_00\6&23573470&0&0000  |  USB 输入设备
+OK  |  HID\VID_05AC&PID_024F&MI_01&COL03\7&26453AF0&0&0002  |  符合 HID 标准的系统控制器
+Unknown  |  LGHUBDEVICE\VID_046D&PID_C231\1&1A590E2C&0&02  |  Logitech G HUB Virtual Mouse
+Unknown  |  HID\VID_05AC&PID_024F&MI_01&COL02\7&1A9E5D2B&0&0001  |  符合 HID 标准的用户控制设备
+OK  |  USB\VID_046D&PID_C08B&MI_01\6&23573470&0&0001  |  USB 输入设备
+
+=== 3. Any device whose name hints at MCHOSE / 杩堜粠 / keyboard ===
+OK  |  HID\VID_05AC&PID_024F&MI_01&COL04\7&26453AF0&0&0003  |  HID Keyboard Device
+OK  |  LGHUBDEVICE\VID_046D&PID_C232\1&1A590E2C&0&01  |  Logitech G HUB Virtual Keyboard
+OK  |  HID\VID_05AC&PID_024F&MI_00\7&13151EB2&0&0000  |  HID Keyboard Device
+Unknown  |  HID\VID_05AC&PID_024F&MI_01&COL04\7&1A9E5D2B&0&0003  |  HID Keyboard Device
+OK  |  HID\VID_046D&PID_C232\2&357F35A&0&0000  |  HID Keyboard Device
+Unknown  |  HID\VID_05AC&PID_024F&MI_00\7&3261E970&0&0000  |  HID Keyboard Device
+OK  |  HID\HID_DEVICE_SYSTEM_VHF&COL01\2&206B990&0&0000  |  HID Keyboard Device
+OK  |  HID\VID_046D&PID_C08B&MI_01&COL01\7&2595893D&0&0000  |  HID Keyboard Device
+
+=== 4. Battery devices right now ===
+(EMPTY - no device reports battery through the HID battery driver)
