@@ -16,6 +16,7 @@ public partial class App : Application
     private TaskbarDock _dock;
     private DispatcherTimer _fullscreenTimer;
     private bool _panelHiddenByFullscreen;
+    private int _panelFsHits;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -50,6 +51,7 @@ public partial class App : Application
         if (_monitor.Settings.DisplayMode != "panel")
         {
             _panelHiddenByFullscreen = false;
+            _panelFsHits = 0;
             return;
         }
 
@@ -60,17 +62,21 @@ public partial class App : Application
 
         if (fullscreen != null)
         {
-            if (!_panel.IsVisible) return;
+            // 和电量条同一套判据：截图选区画布也只待几秒，500ms × 10 次才真隐藏
+            _panelFsHits++;
+            if (_panelFsHits < 10 || !_panel.IsVisible) return;
             _panel.Hide();
             _panelHiddenByFullscreen = true;
-            DiagLog.WriteIfChanged("panel hidden by " + fullscreen);
+            DiagLog.WriteIfChanged("panel", "hidden by " + fullscreen);
             return;
         }
+
+        _panelFsHits = 0;
 
         if (!_panelHiddenByFullscreen || _panel.IsVisible) return;
         _panel.ShowNearTray();
         _panelHiddenByFullscreen = false;
-        DiagLog.WriteIfChanged("panel restored (no fullscreen window)");
+        DiagLog.WriteIfChanged("panel", "restored (no fullscreen window)");
     }
 
     private void OnSettingsChanged() => Dispatcher.BeginInvoke(new Action(ApplyDisplayMode));

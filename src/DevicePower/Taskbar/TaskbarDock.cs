@@ -214,9 +214,10 @@ internal sealed class TaskbarDock : IDisposable
         if (reason == null && _monitor.Settings.HideOnFullscreen)
             reason = FullscreenWatcher.CoveringReason(_hwnd);
 
-        // 连续两次判定要隐藏才真隐藏，单次抖动不该把面板关掉一下
+        // 连续五次（约 5 秒）判定要隐藏才真隐藏：微信/QQ 的截图选区画布也是铺满整屏的普通窗口，
+        // 几何上跟无边框游戏分不出来，只能靠"游戏会待很久、截图只待几秒"来区分
         _hideStreak = reason == null ? 0 : _hideStreak + 1;
-        bool hide = _hideStreak >= 2;
+        bool hide = _hideStreak >= 5;
 
         Log("tb=" + tb.Left + "," + tb.Top + "," + (tb.Right - tb.Left) + "x" + (tb.Bottom - tb.Top) +
             " screen=" + monitor.rcMonitor.Left + "," + monitor.rcMonitor.Top + "," +
@@ -231,6 +232,17 @@ internal sealed class TaskbarDock : IDisposable
 
         if (!_strip.IsVisible) _strip.Show();
         else SetWindowPos(_hwnd, HwndTopmost, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
+
+        // 判定为全屏或截图覆盖层期间一律不重算位置：这两种情况下托盘区会自己窄掉一个图标位（实测 28px），
+        // 一重算条子就左滑，等真隐藏时又滑回来，看着就是"面板自己动了一下"
+        if (reason != null) return;
+
+        string overlay = FullscreenWatcher.OverlayReason(_hwnd);
+        if (overlay != null)
+        {
+            DiagLog.WriteIfChanged("overlay", "position frozen by " + overlay);
+            return;
+        }
 
         double scale = GetDpiForWindow(taskbar) / 96.0;
         _monitor.Look.SetStripLimit((tb.Bottom - tb.Top) / scale, _monitor.Rows.Count >= 2 ? 2 : 1);
@@ -248,6 +260,8 @@ internal sealed class TaskbarDock : IDisposable
 
         int left;
         int top;
+        int trayEdge = tb.Right;
+        int taskListEdge = int.MinValue;
 
         if (tb.Right - tb.Left >= tb.Bottom - tb.Top)
         {
@@ -259,11 +273,12 @@ internal sealed class TaskbarDock : IDisposable
             }
             else
             {
-                int trayLeft = TrayLeft(taskbar, tb, scale);
-                left = trayLeft - width - Math.Max(4, (int)Math.Round(10 * scale));
+                trayEdge = TrayLeft(taskbar, tb, scale);
+                left = trayEdge - width - Math.Max(4, (int)Math.Round(10 * scale));
 
                 // 任务按钮区已经顶到窗口位置时，改放到开始按钮左侧
-                if (TaskListRight(taskbar) > left - margin)
+                taskListEdge = TaskListRight(taskbar);
+                if (taskListEdge > left - margin)
                     left = LeftSlot(taskbar, tb, width, margin);
             }
         }
@@ -278,6 +293,9 @@ internal sealed class TaskbarDock : IDisposable
         if (left + width > tb.Right - margin) left = tb.Right - width - margin;
         if (top < tb.Top) top = tb.Top;
         if (top + height > tb.Bottom) top = tb.Bottom - height;
+
+        DiagLog.WriteIfChanged("pos", "pos=" + left + "," + top + " size=" + width + "x" + height +
+            " tray=" + trayEdge + " tasklist=" + taskListEdge + " side=" + _monitor.Settings.TaskbarSide);
 
         if (left == _targetLeft && top == _targetTop && _hasTarget)
         {
@@ -385,7 +403,7 @@ internal sealed class TaskbarDock : IDisposable
         return null;
     }
 
-    private void Log(string line) => DiagLog.WriteIfChanged(line);
+    private void Log(string line) => DiagLog.WriteIfChanged("dock", line);
 
     private static int TrayLeft(IntPtr taskbar, RECT tb, double scale)
     {

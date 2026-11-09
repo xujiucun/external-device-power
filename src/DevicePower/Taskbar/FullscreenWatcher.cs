@@ -42,10 +42,32 @@ internal static class FullscreenWatcher
         "WindowsDashboard",
     };
 
-    public static bool IsCovering(IntPtr self) => CoveringReason(self) != null;
+    private const int GwlExStyle = -20;
+    private const int WsExToolwindow = 0x00000080;
 
-    /// <summary>null = 没有全屏窗口；否则返回「类名 宽x高」，直接写进 dock.log 好远程认窗口。</summary>
-    public static string CoveringReason(IntPtr self)
+    /// <summary>
+    /// 会开一个铺满整屏的普通窗口的截图进程。微信选区画布的窗口类是 Qt…QWindowIcon，
+    /// 和不带边框的游戏窗口在几何上完全一样，只能按进程名分。
+    /// </summary>
+    private static readonly string[] CaptureExes =
+    {
+        "Weixin.exe",
+        "WeChat.exe",
+        "QQ.exe",
+        "Snipaste.exe",
+        "PixPin.exe",
+    };
+
+    /// <summary>真正的全屏应用（游戏）；null = 没有。</summary>
+    public static string CoveringReason(IntPtr self) => Probe(self, false);
+
+    /// <summary>
+    /// 截图/覆盖层：铺满屏幕的工具窗口（系统截图、Snipaste）或已知截图进程（微信画布）。
+    /// 这段时间任务栏托盘区会临时变窄，电量条跟着重算就会"自己往左跑"，所以要冻结位置。
+    /// </summary>
+    public static string OverlayReason(IntPtr self) => Probe(self, true);
+
+    private static string Probe(IntPtr self, bool wantOverlay)
     {
         IntPtr foreground = GetForegroundWindow();
         if (foreground == IntPtr.Zero || foreground == self) return null;
@@ -55,6 +77,10 @@ internal static class FullscreenWatcher
         {
             if (string.Equals(shell, className, StringComparison.Ordinal)) return null;
         }
+
+        string exe = ExeName(foreground);
+        bool overlay = (GetWindowLong(foreground, GwlExStyle) & WsExToolwindow) != 0 || IsCapture(exe);
+        if (overlay != wantOverlay) return null;
 
         if (!GetWindowRect(foreground, out RECT window)) return null;
         MONITORINFO on = Info(MonitorFromWindow(foreground, 2 /* TONEAREST */));
@@ -67,7 +93,40 @@ internal static class FullscreenWatcher
             if (!SameMonitor(on.rcMonitor, ours.rcMonitor)) return null;
         }
 
-        return className + " " + (window.Right - window.Left) + "x" + (window.Bottom - window.Top);
+        return className + " " + (window.Right - window.Left) + "x" + (window.Bottom - window.Top) + " " + exe;
+    }
+
+    private static bool IsCapture(string exe)
+    {
+        foreach (string name in CaptureExes)
+        {
+            if (string.Equals(name, exe, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>窗口属于哪个进程：微信截图画布和游戏窗口几何上一样，只能靠这个区分。</summary>
+    private static string ExeName(IntPtr hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == 0) return "pid=?";
+
+        IntPtr process = OpenProcess(0x1000 /* QUERY_LIMITED */, false, pid);
+        if (process == IntPtr.Zero) return "pid=" + pid;
+
+        try
+        {
+            var buffer = new StringBuilder(512);
+            int size = buffer.Capacity;
+            return QueryFullProcessImageName(process, 0, buffer, ref size)
+                ? System.IO.Path.GetFileName(buffer.ToString(0, size))
+                : "pid=" + pid;
+        }
+        finally
+        {
+            CloseHandle(process);
+        }
     }
 
     private static bool Covers(RECT window, RECT monitor) =>
@@ -99,6 +158,21 @@ internal static class FullscreenWatcher
 
     [DllImport("user32.dll")]
     private static extern bool GetWindowRect(IntPtr hWnd, out RECT rect);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hWnd, int index);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr OpenProcess(uint access, bool inherit, uint processId);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool QueryFullProcessImageName(IntPtr process, uint flags, StringBuilder name, ref int size);
+
+    [DllImport("kernel32.dll")]
+    private static extern bool CloseHandle(IntPtr handle);
 
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint flags);

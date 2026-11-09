@@ -10,12 +10,16 @@ namespace DevicePower;
 internal static class DiagLog
 {
     private static string _path;
-    private static string _last = "";
+    private static readonly System.Collections.Generic.Dictionary<string, string> _last = new();
 
-    public static void WriteIfChanged(string line)
+    /// <summary>同一 channel 只在内容变化时追加；不同 channel 各自去重，状态行和位置行不会互相顶掉。</summary>
+    public static void WriteIfChanged(string channel, string line)
     {
-        if (line == _last) return;
-        _last = line;
+        lock (_last)
+        {
+            if (_last.TryGetValue(channel, out string previous) && previous == line) return;
+            _last[channel] = line;
+        }
 
         try
         {
