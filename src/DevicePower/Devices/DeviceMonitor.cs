@@ -79,18 +79,10 @@ public sealed class DeviceMonitor
 
     private async Task LoopAsync(CancellationToken ct)
     {
-        bool simulated = false;
-
         while (!ct.IsCancellationRequested)
         {
             var started = Stopwatch.StartNew();
             PollAll();
-
-            if (!simulated)
-            {
-                simulated = true;
-                AddSimulatedDevices();
-            }
 
             if (ct.IsCancellationRequested) break;
 
@@ -238,37 +230,6 @@ public sealed class DeviceMonitor
     }
 
     private void SyncNames() => Look.SetNames(Rows.Select(row => row.Name).ToArray());
-
-    /// <summary>
-    /// 演示用假设备：环境变量 DEVICEPOWER_SIM_GPW=电量（末尾加 c 表示充电中）时，
-    /// 在第一轮轮询后插入一台模拟的罗技 GPW2，不影响真实设备。
-    /// </summary>
-    private void AddSimulatedDevices()
-    {
-        string spec = Environment.GetEnvironmentVariable("DEVICEPOWER_SIM_GPW");
-        if (string.IsNullOrWhiteSpace(spec)) return;
-
-        bool charging = spec.EndsWith("c", StringComparison.OrdinalIgnoreCase);
-        string digits = charging ? spec[..^1] : spec;
-        if (!int.TryParse(digits, out int level)) level = 60;
-        level = Math.Clamp(level, 0, 100);
-
-        RunOnUi(() =>
-        {
-            const string key = "sim:gpw2";
-            if (_rows.ContainsKey(key)) return;
-
-            var row = new DeviceRow(key, "logitech", "GPW2", "GPW2");
-            _knownKeys.Add(key);
-            _rows[key] = row;
-            Rows.Add(row);
-            row.IsCharging = charging;
-            row.Level = level;
-            row.ApplyVisuals(Look);
-            RebuildColumns();
-            Updated?.Invoke();
-        });
-    }
 
     private string ResolveName(string key, string defaultName)
     {
