@@ -1,5 +1,7 @@
 using System;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Threading;
 using DevicePower.Devices;
 using DevicePower.Settings;
 using DevicePower.Taskbar;
@@ -12,6 +14,8 @@ public partial class App : Application
     private TrayHost _tray;
     private BatteryPanel _panel;
     private TaskbarDock _dock;
+    private DispatcherTimer _fullscreenTimer;
+    private bool _panelHiddenByFullscreen;
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -31,12 +35,51 @@ public partial class App : Application
         _monitor.SettingsChanged += OnSettingsChanged;
         _monitor.Start();
         ApplyDisplayMode();
+
+        // 电量条由 dock 自己每秒判全屏；浮动面板没有定时器，这里统一盯一下
+        _fullscreenTimer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _fullscreenTimer.Tick += (_, _) => ApplyFullscreenVisibility();
+        _fullscreenTimer.Start();
+    }
+
+    private void ApplyFullscreenVisibility()
+    {
+        if (_monitor.Settings.DisplayMode != "panel")
+        {
+            _panelHiddenByFullscreen = false;
+            return;
+        }
+
+        IntPtr hwnd = new WindowInteropHelper(_panel).Handle;
+        string fullscreen = _monitor.Settings.HideOnFullscreen
+            ? FullscreenWatcher.CoveringReason(hwnd)
+            : null;
+
+        if (fullscreen != null)
+        {
+            if (!_panel.IsVisible) return;
+            _panel.Hide();
+            _panelHiddenByFullscreen = true;
+            DiagLog.WriteIfChanged("panel hidden by " + fullscreen);
+            return;
+        }
+
+        if (!_panelHiddenByFullscreen || _panel.IsVisible) return;
+        _panel.ShowNearTray();
+        _panelHiddenByFullscreen = false;
+        DiagLog.WriteIfChanged("panel restored (no fullscreen window)");
     }
 
     private void OnSettingsChanged() => Dispatcher.BeginInvoke(new Action(ApplyDisplayMode));
 
     private void ApplyDisplayMode()
     {
+        // 他手动切换显示方式 = 重新表态，全屏隐藏的重现标记要清掉
+        _panelHiddenByFullscreen = false;
+
         if (_monitor.Settings.DisplayMode == "panel")
         {
             _dock.Hide();
@@ -51,6 +94,7 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _fullscreenTimer?.Stop();
         _dock?.Dispose();
         _tray?.Dispose();
         _monitor?.Stop();

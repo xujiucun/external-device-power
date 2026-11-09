@@ -482,6 +482,17 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="104" />
                     <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="全屏时" Style="{StaticResource KeyStyle}" />
+                <CheckBox Grid.Column="1" x:Name="FullscreenBox"
+                          Content="有窗口铺满整块屏幕（全屏游戏）时自动隐藏，退出后自动回来"
+                          Style="{StaticResource CheckStyle}" />
+            </Grid>
+
+            <Grid Style="{StaticResource RowStyle}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="104" />
+                    <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>

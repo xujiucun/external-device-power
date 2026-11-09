@@ -42,6 +42,7 @@ public partial class SettingsWindow : Window
         ModePanel.IsChecked = settings.DisplayMode == "panel";
         SideRight.IsChecked = settings.TaskbarSide != "left";
         SideLeft.IsChecked = settings.TaskbarSide == "left";
+        FullscreenBox.IsChecked = settings.HideOnFullscreen;
 
         IntervalSlider.ValueChanged += (_, _) => UpdateReadouts();
         LowSlider.ValueChanged += (_, _) => UpdateReadouts();
@@ -264,6 +265,7 @@ public partial class SettingsWindow : Window
         settings.TrayIconPath = _trayIconPath ?? "";
         settings.DisplayMode = ModePanel.IsChecked == true ? "panel" : "taskbar";
         settings.TaskbarSide = SideLeft.IsChecked == true ? "left" : "right";
+        settings.HideOnFullscreen = FullscreenBox.IsChecked == true;
         settings.TextColor = CheckedValue(Group("TextColor"), _customColor);
         settings.TextScale = Math.Round(ScaleSlider.Value / 100.0, 2);
         settings.TextWeight = CheckedValue(Group("TextWeight"), "semibold");

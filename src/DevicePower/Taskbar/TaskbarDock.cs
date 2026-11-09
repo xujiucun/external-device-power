@@ -52,7 +52,6 @@ internal sealed class TaskbarDock : IDisposable
     private int _targetTop;
     private bool _hasTarget;
     private int _hideStreak;
-    private string _lastLog = "";
     private bool _disposed;
 
     public TaskbarDock(DeviceMonitor monitor)
@@ -212,6 +211,8 @@ internal sealed class TaskbarDock : IDisposable
         MONITORINFO monitor = MonitorInfo(taskbar);
 
         string reason = HideReason(tb, monitor, out int state);
+        if (reason == null && _monitor.Settings.HideOnFullscreen)
+            reason = FullscreenWatcher.CoveringReason(_hwnd);
 
         // 连续两次判定要隐藏才真隐藏，单次抖动不该把面板关掉一下
         _hideStreak = reason == null ? 0 : _hideStreak + 1;
@@ -384,26 +385,7 @@ internal sealed class TaskbarDock : IDisposable
         return null;
     }
 
-    private void Log(string line)
-    {
-        if (line == _lastLog) return;
-        _lastLog = line;
-
-        try
-        {
-            string dir = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "DevicePower");
-            System.IO.Directory.CreateDirectory(dir);
-            string path = System.IO.Path.Combine(dir, "dock.log");
-            if (System.IO.File.Exists(path) && new System.IO.FileInfo(path).Length > 200000)
-                System.IO.File.Delete(path);
-            System.IO.File.AppendAllText(path,
-                DateTime.Now.ToString("HH:mm:ss") + " " + line + Environment.NewLine);
-        }
-        catch
-        {
-        }
-    }
+    private void Log(string line) => DiagLog.WriteIfChanged(line);
 
     private static int TrayLeft(IntPtr taskbar, RECT tb, double scale)
     {

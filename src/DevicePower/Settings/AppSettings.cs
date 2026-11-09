@@ -53,6 +53,9 @@ public sealed class AppSettings
     /// <summary>电量图形宽度补间：只动图形，不改数字。默认关闭。</summary>
     public bool GlyphAnimation { get; set; }
 
+    /// <summary>前景窗口铺满整块屏（全屏游戏）时隐藏电量 UI，退出后自动回来。</summary>
+    public bool HideOnFullscreen { get; set; } = true;
+
     public static AppSettings Load()
     {
         AppSettings settings = null;

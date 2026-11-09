@@ -13,6 +13,9 @@ public partial class BatteryPanel : Window
         InitializeComponent();
         _monitor = monitor;
         Rows.ItemsSource = monitor.Rows;
+
+        // 开机时还没有设备行，按空面板定的位；行出来后面板变宽，不重新定位就会溢出屏幕右边
+        SizeChanged += (_, _) => PlaceBottomRight();
     }
 
     /// <summary>固定在任务栏上方的右下角。</summary>
@@ -20,6 +23,12 @@ public partial class BatteryPanel : Window
     {
         if (!IsVisible) Show();
         UpdateLayout();
+        PlaceBottomRight();
+    }
+
+    private void PlaceBottomRight()
+    {
+        if (!IsVisible || ActualWidth <= 0 || ActualHeight <= 0) return;
 
         Rect workArea = SystemParameters.WorkArea;
         Left = workArea.Right - ActualWidth;
