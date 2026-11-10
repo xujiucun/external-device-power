@@ -12,16 +12,26 @@
         ResizeMode="NoResize"
         SizeToContent="WidthAndHeight"
         WindowStartupLocation="Manual"
-        FontFamily="Microsoft YaHei UI"
+        FontFamily="Segoe UI, Microsoft YaHei UI"
         TextOptions.TextFormattingMode="Display"
-        MouseEnter="Window_MouseEnter"
-        MouseLeave="Window_MouseLeave"
-        MouseLeftButtonUp="Window_MouseLeftButtonUp">
+        UseLayoutRounding="True"
+        SnapsToDevicePixels="True"
+        MouseLeftButtonUp="Window_MouseLeftButtonUp"
+        MouseRightButtonUp="Window_MouseRightButtonUp">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
         <DataTemplate x:Key="DeviceRowTemplate">
             <Grid Height="{Binding Source={StaticResource Look}, Path=StripRowHeight}">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsAsleep}" Value="True">
+                                <Setter Property="Opacity" Value="0.45" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="{Binding Source={StaticResource Look}, Path=StripSlotOne}" />
                     <ColumnDefinition Width="{Binding Source={StaticResource Look}, Path=StripSlotTwo}" />
@@ -49,7 +59,7 @@
                 <TextBlock Grid.Column="2"
                            Text="{Binding PercentText}"
                            FontSize="{Binding Source={StaticResource Look}, Path=StripPercentFontSize}"
-                           FontWeight="Bold"
+                           FontWeight="{Binding Source={StaticResource Look}, Path=NameWeight}"
                            Foreground="{Binding PercentBrush}"
                            VerticalAlignment="Center"
                            TextAlignment="Right" />
@@ -65,7 +75,7 @@
                         VerticalAlignment="Center"
                         Visibility="{Binding ShowSeparator, Converter={StaticResource BoolToVis}}" />
                 <ItemsControl ItemsSource="{Binding Devices}" ItemTemplate="{StaticResource DeviceRowTemplate}"
-                              VerticalAlignment="Center">
+                              VerticalAlignment="Top">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <StackPanel Orientation="Vertical" />
@@ -79,7 +89,9 @@
     <Border x:Name="Chrome"
             Background="#01000000"
             CornerRadius="6"
-            Padding="8,2">
+            Padding="8,2"
+            ToolTipService.InitialShowDelay="600"
+            ToolTipService.ShowDuration="12000">
         <ItemsControl ItemsSource="{Binding Columns}" ItemTemplate="{StaticResource ColumnTemplate}">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>

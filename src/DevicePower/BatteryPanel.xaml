@@ -28,6 +28,15 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <Grid Height="{Binding Source={StaticResource Look}, Path=PanelRowHeight}" Margin="0,3">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsAsleep}" Value="True">
+                                        <Setter Property="Opacity" Value="0.45" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="{Binding Source={StaticResource Look}, Path=PanelSlotOne}" />
                             <ColumnDefinition Width="{Binding Source={StaticResource Look}, Path=PanelSlotTwo}" />
@@ -54,7 +63,7 @@
                         <TextBlock Grid.Column="2"
                                    Text="{Binding PercentText}"
                                    FontSize="{Binding Source={StaticResource Look}, Path=PanelPercentFontSize}"
-                                   FontWeight="Bold"
+                                   FontWeight="{Binding Source={StaticResource Look}, Path=NameWeight}"
                                    Foreground="{Binding PercentBrush}"
                                    VerticalAlignment="Center"
                                    HorizontalAlignment="Right" />

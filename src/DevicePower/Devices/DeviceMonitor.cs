@@ -17,8 +17,11 @@ public sealed class DeviceMonitor
     private readonly Dictionary<string, DeviceRow> _rows = new();
     private readonly HashSet<string> _knownKeys = new();
 
-    /// <summary>本轮读到电量的设备；只有读到过才算“在场”，读不到就从界面移除。</summary>
+    /// <summary>本轮读到电量的设备；只有读到过才算“在场”，接收器拔掉就从界面移除。</summary>
     private readonly HashSet<string> _present = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>休眠中的设备：接收器还在，但这轮没应答，界面保留上次读数并压暗。</summary>
+    private readonly HashSet<string> _asleep = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>_present 的快照：轮询线程会改集合，界面只读快照。</summary>
     private volatile HashSet<string> _presentSnapshot = new(StringComparer.OrdinalIgnoreCase);
@@ -145,7 +148,9 @@ public sealed class DeviceMonitor
         int reads = 0;
         var cameOnline = new List<string>();
         var wentOffline = new List<string>();
+        var asleepNow = new List<string>();
         bool presenceChanged = false;
+        bool stateChanged = false;
         HashSet<string> presentSnapshot;
         lock (_ioLock)
         {
@@ -170,6 +175,7 @@ public sealed class DeviceMonitor
                     {
                         // 记成已通知：以后重新勾选时不该被当成一次“上线”再推
                         _announced.Add(device.Key);
+                        if (_asleep.Remove(device.Key)) stateChanged = true;
                         if (_present.Remove(device.Key))
                         {
                             wentOffline.Add(device.Key);
@@ -182,11 +188,21 @@ public sealed class DeviceMonitor
                     if (reading is BatteryReading value)
                     {
                         if (_present.Add(device.Key)) presenceChanged = true;
+                        if (_asleep.Remove(device.Key)) stateChanged = true;
                         Publish(device, value);
                         reads++;
 
                         // 每台设备整个进程只推一次；中途读不到再恢复不算新的连接
                         if (_announced.Add(device.Key)) cameOnline.Add(device.Key);
+                    }
+                    else if (_present.Contains(device.Key))
+                    {
+                        // 设备还在（接收器没拔），只是这轮没回应：保留上次读数并标记休眠
+                        if (_asleep.Add(device.Key))
+                        {
+                            asleepNow.Add(device.Key);
+                            stateChanged = true;
+                        }
                     }
                     else if (_present.Remove(device.Key))
                     {
@@ -206,6 +222,7 @@ public sealed class DeviceMonitor
             foreach (string key in _present.Where(k => !seenKeys.Contains(k)).ToList())
             {
                 _present.Remove(key);
+                if (_asleep.Remove(key)) stateChanged = true;
                 wentOffline.Add(key);
                 presenceChanged = true;
             }
@@ -214,17 +231,24 @@ public sealed class DeviceMonitor
             _presentSnapshot = presentSnapshot;
         }
 
-        if (presenceChanged)
+        if (presenceChanged || stateChanged)
         {
             RunOnUi(() =>
             {
+                if (asleepNow.Count > 0)
+                {
+                    foreach (string key in asleepNow)
+                        if (_rows.TryGetValue(key, out DeviceRow row))
+                            row.IsAsleep = true;
+                }
+
                 if (wentOffline.Count > 0)
                 {
-                    // 读不到就清场：读数和充电状态归零，再从电量条 / 面板移除
+                    // 接收器拔掉/隐藏：读数和充电状态归零，再从电量条 / 面板移除
                     foreach (string key in wentOffline)
                     {
                         ClearReading(key);
-                        DiagLog.WriteIfChanged("offline", $"{key} 读不到，已从界面移除");
+                        DiagLog.WriteIfChanged("offline", $"{key} 已离线，从界面移除");
                     }
                 }
 
@@ -249,6 +273,8 @@ public sealed class DeviceMonitor
             created = new MchoseConnection(collection, Settings.DeviceName);
         else if (LogitechConnection.Matches(collection))
             created = new LogitechConnection(collection);
+        else if (StandardBatteryConnection.Matches(collection))
+            created = new StandardBatteryConnection(collection);
 
         if (created != null) _connections[collection.Path] = created;
         return created;
@@ -279,6 +305,7 @@ public sealed class DeviceMonitor
         {
             if (!_rows.TryGetValue(device.Key, out DeviceRow row)) return;
 
+            row.IsAsleep = false;
             row.IsCharging = reading.IsCharging;
             row.Level = reading.Level;
             row.ApplyVisuals(Look);
@@ -316,11 +343,24 @@ public sealed class DeviceMonitor
     private void RebuildColumns()
     {
         Columns.Clear();
-        for (int i = 0; i < Rows.Count; i += 2)
+
+        // 满组（两台）要贴着任务栏那一侧：靠托盘时满组放右边，落单的一台挪到最左边；
+        // 靠开始按钮时满组天然就在左边。4 台/6 台都是整组，不存在这个问题。
+        bool partialFirst = Rows.Count % 2 == 1 && Settings.TaskbarSide != "left";
+        if (partialFirst)
         {
-            DeviceRow top = Rows[i];
-            DeviceRow bottom = i + 1 < Rows.Count ? Rows[i + 1] : null;
-            Columns.Add(new DeviceColumn(top, bottom, i > 0));
+            Columns.Add(new DeviceColumn(Rows[Rows.Count - 1], null, false));
+            for (int i = 0; i < Rows.Count - 1; i += 2)
+                Columns.Add(new DeviceColumn(Rows[i], Rows[i + 1], true));
+        }
+        else
+        {
+            for (int i = 0; i < Rows.Count; i += 2)
+            {
+                DeviceRow top = Rows[i];
+                DeviceRow bottom = i + 1 < Rows.Count ? Rows[i + 1] : null;
+                Columns.Add(new DeviceColumn(top, bottom, i > 0));
+            }
         }
 
         // 名字列宽是按最长名字量出来的，行数变了要重量一次

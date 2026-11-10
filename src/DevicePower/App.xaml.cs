@@ -30,6 +30,9 @@ public partial class App : Application
         _dock = new TaskbarDock(_monitor);
         _tray = new TrayHost(_monitor, _panel);
 
+        // 任务栏电量条右键 = 托盘右键，弹同一个菜单
+        _dock.MenuRequested += _tray.ShowMenu;
+
         // 开机自启时刷新一遍路径，防止程序搬家后指向旧位置
         if (settings.AutoStart) DevicePower.Settings.AutoStart.Apply(true);
 

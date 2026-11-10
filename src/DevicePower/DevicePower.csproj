@@ -10,7 +10,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <AssemblyName>DevicePower</AssemblyName>
     <RootNamespace>DevicePower</RootNamespace>
-    <Version>0.0.1</Version>
+    <Version>0.0.2</Version>
     <RollForward>LatestMajor</RollForward>
     <ApplicationIcon>Assets\hlogo.ico</ApplicationIcon>
   </PropertyGroup>

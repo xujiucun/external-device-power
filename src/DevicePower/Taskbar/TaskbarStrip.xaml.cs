@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
-using System.Windows.Media;
 using DevicePower.Devices;
 
 namespace DevicePower.Taskbar;
@@ -11,11 +10,22 @@ namespace DevicePower.Taskbar;
 public partial class TaskbarStrip : Window
 {
     public event Action RefreshRequested;
+    public event Action RightClickRequested;
 
     public TaskbarStrip(DeviceMonitor monitor)
     {
         InitializeComponent();
         DataContext = monitor;
+    }
+
+    /// <summary>合成模式下的离屏渲染根节点。</summary>
+    internal FrameworkElement StripRoot => Chrome;
+
+    /// <summary>窗口回退模式下的悬停提示。</summary>
+    internal void SetTooltipText(string text)
+    {
+        if (Chrome.ToolTip as string == text) return;
+        Chrome.ToolTip = text;
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -28,14 +38,11 @@ public partial class TaskbarStrip : Window
         SetWindowLong(hwnd, -20, exStyle | 0x08000000 /* WS_EX_NOACTIVATE */ | 0x00000080 /* WS_EX_TOOLWINDOW */);
     }
 
-    private void Window_MouseEnter(object sender, MouseEventArgs e) =>
-        Chrome.Background = new SolidColorBrush(Color.FromArgb(0x26, 0xFF, 0xFF, 0xFF));
-
-    private void Window_MouseLeave(object sender, MouseEventArgs e) =>
-        Chrome.Background = new SolidColorBrush(Color.FromArgb(0x01, 0, 0, 0));
-
     private void Window_MouseLeftButtonUp(object sender, MouseButtonEventArgs e) =>
         RefreshRequested?.Invoke();
+
+    private void Window_MouseRightButtonUp(object sender, MouseButtonEventArgs e) =>
+        RightClickRequested?.Invoke();
 
     [DllImport("user32.dll")]
     private static extern int GetWindowLong(IntPtr hWnd, int index);

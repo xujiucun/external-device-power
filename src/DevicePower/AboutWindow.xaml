@@ -89,11 +89,7 @@
             Background="#FA202020"
             BorderBrush="#38FFFFFF"
             BorderThickness="1"
-            Padding="28,22"
-            Margin="18">
-        <Border.Effect>
-            <DropShadowEffect BlurRadius="32" ShadowDepth="9" Opacity="0.55" Color="Black" />
-        </Border.Effect>
+            Padding="28,22">
         <StackPanel>
             <Grid Background="Transparent" MouseLeftButtonDown="Header_MouseLeftButtonDown" Margin="0,0,0,2">
                 <TextBlock Text="关于" FontSize="21" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" />
@@ -149,8 +145,11 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock x:Name="RepoText" Style="{StaticResource ValueStyle}"
-                           TextTrimming="CharacterEllipsis" Margin="0,0,12,0" />
+                <TextBlock Style="{StaticResource ValueStyle}"
+                           TextTrimming="CharacterEllipsis" Margin="0,0,12,0">
+                    <Hyperlink x:Name="RepoLink" RequestNavigate="RepoLink_RequestNavigate"
+                               Foreground="#7FB3FF" TextDecorations="Underline"><Run x:Name="RepoRun" /></Hyperlink>
+                </TextBlock>
                 <Button Grid.Column="1" Content="复制地址" Margin="0,0,8,0"
                         Style="{StaticResource GhostButton}" Click="Copy_Click" />
                 <TextBlock Grid.Column="2" x:Name="CopyHint" Style="{StaticResource KeyStyle}" Text="GitHub 仓库" />
@@ -172,7 +171,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="设备支持" Style="{StaticResource KeyStyle}" />
                 <TextBlock Grid.Column="1" Style="{StaticResource ValueStyle}"
-                           Text="迈从 K99 V2（已实测）· 罗技 Lightspeed（待实测）" />
+                           Text="迈从 K99 V2（已实测）· 罗技 GPW2（已实测）· 其他标准 HID 电量设备（兜底）" />
             </Grid>
             <Grid Margin="0,0,0,6">
                 <Grid.ColumnDefinitions>

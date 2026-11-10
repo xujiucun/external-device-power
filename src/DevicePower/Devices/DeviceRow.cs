@@ -11,6 +11,7 @@ public sealed class DeviceRow : INotifyPropertyChanged
     private string _name;
     private int _level = -1;
     private bool _isCharging;
+    private bool _isAsleep;
     private Brush _percentBrush = Brushes.White;
 
     public DeviceRow(string key, string family, string defaultName, string name)
@@ -71,6 +72,18 @@ public sealed class DeviceRow : INotifyPropertyChanged
     }
 
     public string PercentText => _level < 0 ? "--" : _level + "%";
+
+    /// <summary>设备休眠：显示的是上次读数，界面上会压暗。</summary>
+    public bool IsAsleep
+    {
+        get => _isAsleep;
+        set
+        {
+            if (_isAsleep == value) return;
+            _isAsleep = value;
+            OnPropertyChanged(nameof(IsAsleep));
+        }
+    }
 
     public Brush PercentBrush
     {

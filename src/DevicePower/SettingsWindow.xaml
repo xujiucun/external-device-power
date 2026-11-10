@@ -598,7 +598,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="全屏时" Style="{StaticResource KeyStyle}" />
                 <CheckBox Grid.Column="1" x:Name="FullscreenBox"
-                          Content="有窗口铺满整块屏幕（全屏游戏）时自动隐藏，退出后自动回来"
+                          Content="浮动面板有窗口铺满整块屏幕（全屏游戏）时自动隐藏，退出后自动回来"
                           Style="{StaticResource CheckStyle}" />
             </Grid>
 
@@ -729,7 +729,7 @@
                     <ColumnDefinition Width="120" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="名称粗细" Style="{StaticResource KeyStyle}" />
+                <TextBlock Text="文字粗细" Style="{StaticResource KeyStyle}" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
                     <RadioButton GroupName="TextWeight" Tag="light" Content="细" Style="{StaticResource OptionStyle}" />
                     <RadioButton GroupName="TextWeight" Tag="normal" Content="常规" Style="{StaticResource OptionStyle}" />
@@ -800,7 +800,7 @@
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="过渡动画" Style="{StaticResource KeyStyle}" />
-                <CheckBox Grid.Column="1" x:Name="AnimationBox" Content="电池条 / 圆环 200ms 补间（数字仍是原始读数）"
+                <CheckBox Grid.Column="1" x:Name="AnimationBox" Content="仅浮动面板：电池条 / 圆环 200ms 补间（数字仍是原始读数）"
                           Style="{StaticResource CheckStyle}" />
             </Grid>
 

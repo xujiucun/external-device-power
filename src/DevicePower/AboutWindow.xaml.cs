@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Navigation;
 
 namespace DevicePower;
 
@@ -15,9 +16,23 @@ public partial class AboutWindow : Window
         InitializeComponent();
 
         VersionText.Text = "版本 V" + ReadVersion();
-        RepoText.Text = RepositoryUrl;
+        RepoLink.NavigateUri = new Uri(RepositoryUrl);
+        RepoRun.Text = RepositoryUrl;
         RuntimeText.Text = $".NET {Environment.Version.Major} · Windows {Environment.OSVersion.Version.Build}";
         PathText.Text = CurrentExePath();
+    }
+
+    private void RepoLink_RequestNavigate(object sender, RequestNavigateEventArgs e)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch
+        {
+        }
+
+        e.Handled = true;
     }
 
     private static string ReadVersion()

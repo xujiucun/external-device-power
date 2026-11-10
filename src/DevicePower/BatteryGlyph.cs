@@ -102,6 +102,17 @@ public sealed class BatteryGlyph : FrameworkElement
         });
     }
 
+    /// <summary>
+    /// 离屏渲染时把补间直接落位：没有可见窗口就没有渲染时钟，BeginAnimation 加上的时钟不会推进，
+    /// 图形会一直停在旧电量上。
+    /// </summary>
+    internal void SnapToLevel()
+    {
+        if (AnimatedLevel == Level) return;
+        BeginAnimation(AnimatedLevelProperty, null);
+        AnimatedLevel = Level;
+    }
+
     protected override void OnRender(DrawingContext dc)
     {
         double w = ActualWidth;

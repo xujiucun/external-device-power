@@ -11,13 +11,9 @@ namespace DevicePower.Devices;
 /// <summary>把外观设置换算成界面能直接绑定的值；设置保存后由 DeviceMonitor 刷新。</summary>
 public sealed class DisplayLook : INotifyPropertyChanged
 {
-    private static readonly FontFamily Family = new FontFamily("Microsoft YaHei UI");
+    private static readonly FontFamily Family = new("Segoe UI, Microsoft YaHei UI");
 
     private Typeface _face = new Typeface(Family, FontStyles.Normal, FontWeights.SemiBold, FontStretches.Normal);
-
-    /// <summary>百分比始终加粗渲染，量宽度必须用同一个字重，否则会挤成省略号。</summary>
-    private static readonly Typeface PercentFace = new Typeface(
-        Family, FontStyles.Normal, FontWeights.Bold, FontStretches.Normal);
 
     private string[] _names = Array.Empty<string>();
 
@@ -32,9 +28,7 @@ public sealed class DisplayLook : INotifyPropertyChanged
     private const double PanelGlyphWBase = 34;
     private const double PanelGlyphHBase = 17;
 
-    /// <summary>任务栏一行放不下就被屏幕底边切字，所以任务栏侧的放大要按可用高度封顶。</summary>
-    private const double StripScaleCap = 1.3;
-
+    /// <summary>任务栏侧的放大只按可用高度封顶：两行时每行放不下就会顶到任务栏外面。</summary>
     private const double StripPaddingDip = 4;
 
     private double _stripAvailableDip = 48;
@@ -114,7 +108,7 @@ public sealed class DisplayLook : INotifyPropertyChanged
     {
         double scale = Math.Clamp(Settings.TextScale, 0.8, 1.6);
         double rowCap = Math.Clamp(Math.Floor((_stripAvailableDip - StripPaddingDip) / _stripRows), 16, 44);
-        double stripScale = Math.Min(scale, Math.Min(StripScaleCap, rowCap / StripRowBase));
+        double stripScale = Math.Min(scale, rowCap / StripRowBase);
 
         TextBrush = Brush(ParseColor(Settings.TextColor));
         ChargeBrush = Brush(Color.FromRgb(0x6E, 0xE7, 0xA8));
@@ -166,12 +160,13 @@ public sealed class DisplayLook : INotifyPropertyChanged
         double stripNameWidth = Math.Max(stripNameInk + 10, 30);
         StripSlotOne = glyphLeft ? GridLength.Auto : new GridLength(stripNameWidth);
         StripSlotTwo = glyphLeft && !hideName ? new GridLength(stripNameWidth) : GridLength.Auto;
-        StripPercentSlot = new GridLength(Measure("100%", StripPercentFontSize, PercentFace) + 4);
+        // 名称和百分比用同一套字重，量宽度也用 _face，否则会挤成省略号
+        StripPercentSlot = new GridLength(Measure("100%", StripPercentFontSize, _face) + 4);
 
         double panelNameWidth = Math.Max(panelNameInk + 20, 44);
         PanelSlotOne = glyphLeft ? GridLength.Auto : new GridLength(panelNameWidth);
         PanelSlotTwo = glyphLeft && !hideName ? new GridLength(panelNameWidth) : GridLength.Auto;
-        PanelPercentSlot = new GridLength(Measure("100%", PanelPercentFontSize, PercentFace) + 4);
+        PanelPercentSlot = new GridLength(Measure("100%", PanelPercentFontSize, _face) + 4);
 
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
     }

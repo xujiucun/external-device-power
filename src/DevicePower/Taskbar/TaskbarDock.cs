@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Interop;
@@ -30,6 +31,12 @@ internal sealed class TaskbarDock : IDisposable
     private readonly DispatcherTimer _timer;
     private readonly WinEventDelegate _zOrderProc;
     private readonly WinEventDelegate _foregroundProc;
+    private readonly CompositionStripHost _compositionHost;
+    private StripSurfaceRenderer _surface;
+    private bool _composition;
+    private StripTooltipWindow _tooltip;
+    private DispatcherTimer _tooltipDelay;
+    private double _lastScale = 1;
     private readonly AutoResetEvent _guardSignal = new(false);
     private Thread _guardThread;
     private IntPtr _hwnd;
@@ -55,21 +62,69 @@ internal sealed class TaskbarDock : IDisposable
     private int _normalBand = -1;
     private bool _disposed;
 
+    public event Action MenuRequested;
+
     public TaskbarDock(DeviceMonitor monitor)
     {
         _monitor = monitor;
         _strip = new TaskbarStrip(monitor);
         _strip.RefreshRequested += monitor.RequestRefresh;
+        _strip.RightClickRequested += () => MenuRequested?.Invoke();
         _zOrderProc = OnZOrderChanged;
         _foregroundProc = OnForegroundChanged;
 
-        _timer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+        // 优先走 DirectComposition：窗口是任务栏的子窗口，开始菜单打开时也不会被盖住。
+        // 初始化失败就退回现在的顶层 WPF 窗口。
+        _compositionHost = new CompositionStripHost();
+        _composition = _compositionHost.TryInitialize();
+        if (_composition)
+        {
+            _surface = new StripSurfaceRenderer(_strip);
+            _compositionHost.Clicked += () => _monitor.RequestRefresh();
+            _compositionHost.RightClicked += () =>
+            {
+                _tooltipDelay?.Stop();
+                _tooltip?.HideTip();
+                MenuRequested?.Invoke();
+            };
+            _compositionHost.HoverChanged += OnStripHover;
+
+            // 悬停 500ms 再弹提示，划过去不打扰
+            _tooltip = new StripTooltipWindow();
+            _tooltipDelay = new DispatcherTimer(DispatcherPriority.Background)
+            {
+                Interval = TimeSpan.FromMilliseconds(500),
+            };
+            _tooltipDelay.Tick += (_, _) =>
+            {
+                _tooltipDelay.Stop();
+                ShowStripTooltip();
+            };
+
+            DiagLog.WriteIfChanged("dock", "composition rendering enabled");
+        }
+        else
+        {
+            DiagLog.WriteIfChanged("dock", "composition unavailable, using window overlay");
+        }
+
+        _timer = new DispatcherTimer(DispatcherPriority.Background)
+        {
+            Interval = _composition ? TimeSpan.FromMilliseconds(250) : TimeSpan.FromSeconds(1),
+        };
         _timer.Tick += (_, _) => Update();
     }
 
     public void Show()
     {
         if (_disposed) return;
+
+        if (_composition)
+        {
+            UpdateComposition();
+            if (!_timer.IsEnabled) _timer.Start();
+            return;
+        }
 
         if (!_strip.IsVisible) _strip.Show();
         _hwnd = new WindowInteropHelper(_strip).Handle;
@@ -93,7 +148,10 @@ internal sealed class TaskbarDock : IDisposable
         StopGlide();
         Interlocked.Exchange(ref _guardHwnd, 0);
         UnhookZOrder();
-        _strip.Hide();
+        _tooltipDelay?.Stop();
+        _tooltip?.HideTip();
+        if (_composition) _compositionHost.Hide();
+        else _strip.Hide();
         _lastX = int.MinValue;
         _currentLeft = double.NaN;
         _hasTarget = false;
@@ -197,6 +255,13 @@ internal sealed class TaskbarDock : IDisposable
     private void Update()
     {
         if (_disposed) return;
+
+        if (_composition)
+        {
+            UpdateComposition();
+            return;
+        }
+
         if (_hwnd == IntPtr.Zero) _hwnd = new WindowInteropHelper(_strip).Handle;
         if (_hwnd == IntPtr.Zero) return;
 
@@ -218,6 +283,8 @@ internal sealed class TaskbarDock : IDisposable
             if (_strip.IsVisible) _strip.Hide();
             return;
         }
+
+        _strip.SetTooltipText(BuildTooltipText());
 
         // 开始菜单/搜索显示时先整体隐藏（避免被它的全屏宿主盖住）
         if (FullscreenWatcher.IsStartMenuOpen())
@@ -295,12 +362,180 @@ internal sealed class TaskbarDock : IDisposable
         int height = self.Bottom - self.Top;
         if (width <= 0 || height <= 0) return;
 
-        int margin = Math.Max(2, (int)Math.Round(6 * scale));
+        ComputePosition(taskbar, tb, scale, width, height,
+            out int left, out int top, out int trayEdge, out int taskListEdge);
 
-        int left;
-        int top;
-        int trayEdge = tb.Right;
-        int taskListEdge = int.MinValue;
+        DiagLog.WriteIfChanged("pos", "pos=" + left + "," + top + " size=" + width + "x" + height +
+            " tray=" + trayEdge + " tasklist=" + taskListEdge + " side=" + _monitor.Settings.TaskbarSide);
+
+        if (left == _targetLeft && top == _targetTop && _hasTarget)
+        {
+            // 位置没变：缓动由渲染帧自己推进，这里不再多踩一步（之前每秒 tick 叠加一步就是卡顿的来源）
+            return;
+        }
+
+        _targetLeft = left;
+        _targetTop = top;
+        _hasTarget = true;
+
+        if (double.IsNaN(_currentLeft))
+        {
+            FinishGlide(left, top);
+            return;
+        }
+
+        StartGlide(left, top);
+    }
+
+    /// <summary>
+    /// 合成模式的刷新：自己离屏渲染、自己上传，不再依赖“置顶窗口压过任务栏”的那套把戏。
+    /// 开始菜单打开时任务栏会升到更高层，这里什么都不用做，电量条天然跟着任务栏。
+    /// </summary>
+    private void UpdateComposition()
+    {
+        if (_disposed) return;
+
+        IntPtr taskbar = FindWindow("Shell_TrayWnd", null);
+        if (taskbar == IntPtr.Zero)
+        {
+            _compositionHost.Hide();
+            _tooltip?.HideTip();
+            return;
+        }
+
+        if (_monitor.Rows.Count == 0)
+        {
+            ResetCompositionLayout();
+            _compositionHost.Hide();
+            _tooltip?.HideTip();
+            return;
+        }
+
+        RECT tb;
+        GetWindowRect(taskbar, out tb);
+
+        // 电量条现在是任务栏的子窗口，任务栏被全屏应用盖住/自动隐藏时它也一起消失，
+        // 这里不再自己做全屏判定；「全屏时」开关只留给浮动面板和原生渲染不可用时的回退窗口。
+        double scale = GetDpiForWindow(taskbar) / 96.0;
+        _lastScale = scale;
+        _monitor.Look.SetStripLimit((tb.Bottom - tb.Top) / scale, _monitor.Rows.Count >= 2 ? 2 : 1);
+
+        if (!_surface.Render(scale))
+        {
+            _compositionHost.Hide();
+            _tooltip?.HideTip();
+            return;
+        }
+
+        int width = _surface.PixelWidth;
+        int height = _surface.PixelHeight;
+        if (width <= 0 || height <= 0) return;
+
+        string overlay = FullscreenWatcher.OverlayReason(_compositionHost.Hwnd);
+        if (overlay != null)
+            DiagLog.WriteIfChanged("overlay", "composition position frozen by " + overlay);
+
+        if (overlay == null || !_hasTarget)
+        {
+            ComputePosition(taskbar, tb, scale, width, height,
+                out int left, out int top, out int trayEdge, out int taskListEdge);
+
+            if (left != _targetLeft || top != _targetTop || !_hasTarget)
+            {
+                _targetLeft = left;
+                _targetTop = top;
+                _hasTarget = true;
+                DiagLog.WriteIfChanged("pos", "pos=" + left + "," + top + " size=" + width + "x" + height +
+                    " tray=" + trayEdge + " tasklist=" + taskListEdge + " side=" + _monitor.Settings.TaskbarSide);
+            }
+        }
+
+        if (!_compositionHost.Update(taskbar, _targetLeft, _targetTop, width, height) ||
+            !_compositionHost.Upload(_surface.Pixels, width, height, _surface.Stride))
+        {
+            DisableComposition("update failed");
+            return;
+        }
+
+        // 提示已经显示时跟着更新内容和位置
+        if (_tooltip != null && _tooltip.IsVisible) ShowStripTooltip();
+    }
+
+    /// <summary>
+    /// 原生链路出问题（设备丢失、交换链失效）时退回普通窗口，至少不会留一块不再更新的画面。
+    /// </summary>
+    private void DisableComposition(string reason)
+    {
+        if (!_composition) return;
+        _composition = false;
+        DiagLog.WriteIfChanged("dock", "composition disabled: " + reason);
+
+        _compositionHost.Dispose();
+        _surface = null;
+        _tooltipDelay?.Stop();
+        _tooltip?.HideTip();
+        _timer.Interval = TimeSpan.FromSeconds(1);
+
+        _strip.Show();
+        _hwnd = new WindowInteropHelper(_strip).Handle;
+        Interlocked.Exchange(ref _guardHwnd, _hwnd.ToInt64());
+        StartGuard();
+        _hasTarget = false;
+        Update();
+    }
+
+    private void ResetCompositionLayout()
+    {
+        _hideStreak = 0;
+        _hasTarget = false;
+    }
+
+    /// <summary>悬停提示：每台设备一行，名称 + 电量，充电中额外标注。</summary>
+    private string BuildTooltipText()
+    {
+        var text = new StringBuilder();
+        foreach (DeviceRow row in _monitor.Rows)
+        {
+            if (text.Length > 0) text.Append("\r\n");
+            text.Append(row.Name).Append(' ').Append(row.PercentText);
+            if (row.IsAsleep) text.Append("（休眠，上次读数）");
+            else if (row.IsCharging) text.Append("（充电中）");
+        }
+
+        return text.ToString();
+    }
+
+    private void OnStripHover(bool hover)
+    {
+        if (_disposed || !_composition || _tooltip == null) return;
+
+        if (hover && _hasTarget)
+        {
+            _tooltipDelay.Stop();
+            _tooltipDelay.Start();
+        }
+        else
+        {
+            _tooltipDelay.Stop();
+            _tooltip.HideTip();
+        }
+    }
+
+    private void ShowStripTooltip()
+    {
+        if (_disposed || !_composition || !_hasTarget || _tooltip == null || _monitor.Rows.Count == 0) return;
+
+        _tooltip.ShowText(BuildTooltipText(), _lastScale, _targetLeft, _targetTop,
+            _surface.PixelWidth, _surface.PixelHeight);
+    }
+
+    /// <summary>任务栏上的横向/纵向位置，窗口模式与合成模式共用。</summary>
+    private void ComputePosition(IntPtr taskbar, RECT tb, double scale, int width, int height,
+        out int left, out int top, out int trayEdge, out int taskListEdge)
+    {
+        int margin = Math.Max(2, (int)Math.Round(6 * scale));
+        trayEdge = tb.Right;
+        taskListEdge = int.MinValue;
 
         if (tb.Right - tb.Left >= tb.Bottom - tb.Top)
         {
@@ -332,27 +567,6 @@ internal sealed class TaskbarDock : IDisposable
         if (left + width > tb.Right - margin) left = tb.Right - width - margin;
         if (top < tb.Top) top = tb.Top;
         if (top + height > tb.Bottom) top = tb.Bottom - height;
-
-        DiagLog.WriteIfChanged("pos", "pos=" + left + "," + top + " size=" + width + "x" + height +
-            " tray=" + trayEdge + " tasklist=" + taskListEdge + " side=" + _monitor.Settings.TaskbarSide);
-
-        if (left == _targetLeft && top == _targetTop && _hasTarget)
-        {
-            // 位置没变：缓动由渲染帧自己推进，这里不再多踩一步（之前每秒 tick 叠加一步就是卡顿的来源）
-            return;
-        }
-
-        _targetLeft = left;
-        _targetTop = top;
-        _hasTarget = true;
-
-        if (double.IsNaN(_currentLeft))
-        {
-            FinishGlide(left, top);
-            return;
-        }
-
-        StartGlide(left, top);
     }
 
     /// <summary>
@@ -598,6 +812,9 @@ internal sealed class TaskbarDock : IDisposable
         _guardThread?.Join(500);
         _guardSignal.Dispose();
 
+        _tooltipDelay?.Stop();
+        _tooltip?.Close();
+        _compositionHost.Dispose();
         _strip.Close();
     }
 }

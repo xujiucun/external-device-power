@@ -13,24 +13,31 @@ internal sealed class HidCollection
     public ushort UsagePage, Usage;
     public ushort InReportLen, OutReportLen, FeatReportLen;
     public string Product = "", Manufacturer = "", Serial = "";
+
+    /// <summary>顶层集合就是 Battery Strength（Usage Page 0x06 / Usage 0x20）。</summary>
+    public bool StandardBattery;
 }
 
 internal sealed class HidStream : IDisposable
 {
     private readonly SafeFileHandle _handle;
+    private readonly IntPtr _preparsed;
     private readonly ManualResetEvent _writeEvent = new(false);
     private readonly ManualResetEvent _readEvent = new(false);
 
     public int InLen { get; }
     public int OutLen { get; }
+    public int FeatLen { get; }
     public string Path { get; }
 
-    internal HidStream(SafeFileHandle handle, string path, int inLen, int outLen)
+    internal HidStream(SafeFileHandle handle, string path, int inLen, int outLen, int featLen, IntPtr preparsed)
     {
         _handle = handle;
+        _preparsed = preparsed;
         Path = path;
         InLen = inLen;
         OutLen = outLen;
+        FeatLen = featLen;
     }
 
     public bool Write(byte[] frame, int timeoutMs)
@@ -70,9 +77,26 @@ internal sealed class HidStream : IDisposable
         return HidNative.GetOverlappedResult(_handle, ref overlapped, out read, false);
     }
 
+    public bool GetFeature(byte[] buffer) => HidNative.HidD_GetFeature(_handle, buffer, buffer.Length);
+
+    /// <summary>从输入/Feature 报告里取标准 HID 用法值（如 Battery Strength）。</summary>
+    public bool TryGetUsageValue(bool feature, byte[] report, int length, ushort page, ushort usage, out int value)
+    {
+        value = 0;
+        if (_preparsed == IntPtr.Zero) return false;
+
+        int status = HidNative.HidP_GetUsageValue(feature ? HidNative.HidpFeature : HidNative.HidpInput,
+            page, 0, usage, out uint raw, _preparsed, report, (uint)length);
+        if (status != HidNative.HidpStatusSuccess) return false;
+
+        value = (int)raw;
+        return true;
+    }
+
     public void Dispose()
     {
         _handle?.Dispose();
+        if (_preparsed != IntPtr.Zero) HidNative.HidD_FreePreparsedData(_preparsed);
         _writeEvent.Dispose();
         _readEvent.Dispose();
     }
@@ -120,10 +144,17 @@ internal static class HidNative
     private static extern void HidD_GetHidGuid(out Guid guid);
 
     [DllImport("hid.dll")]
-    private static extern bool HidD_GetPreparsedData(SafeFileHandle h, out IntPtr preparsed);
+    internal static extern bool HidD_GetPreparsedData(SafeFileHandle h, out IntPtr preparsed);
 
     [DllImport("hid.dll")]
-    private static extern bool HidD_FreePreparsedData(IntPtr preparsed);
+    internal static extern bool HidD_FreePreparsedData(IntPtr preparsed);
+
+    [DllImport("hid.dll")]
+    internal static extern bool HidD_GetFeature(SafeFileHandle h, byte[] buffer, int length);
+
+    [DllImport("hid.dll")]
+    internal static extern int HidP_GetUsageValue(int reportType, ushort usagePage, ushort linkCollection,
+        ushort usage, out uint value, IntPtr preparsed, byte[] report, uint reportLength);
 
     [DllImport("hid.dll")]
     private static extern int HidP_GetCaps(IntPtr preparsed, ref HIDP_CAPS caps);
@@ -156,6 +187,9 @@ internal static class HidNative
     internal static extern bool CancelIoEx(SafeFileHandle h, ref NativeOverlapped overlapped);
 
     internal const int ERROR_IO_PENDING = 997;
+    internal const int HidpInput = 0;
+    internal const int HidpFeature = 2;
+    internal const int HidpStatusSuccess = 0x00110000;
     private const int HIDP_STATUS_SUCCESS = 0x00110000;
     private const uint FILE_SHARE_RW = 0x1 | 0x2;
     private const uint OPEN_EXISTING = 3;
@@ -218,6 +252,8 @@ internal static class HidNative
                     info.InReportLen = caps.InputReportByteLength;
                     info.OutReportLen = caps.OutputReportByteLength;
                     info.FeatReportLen = caps.FeatureReportByteLength;
+                    info.StandardBattery = caps.UsagePage == 0x06 && caps.Usage == 0x20 &&
+                                           (caps.InputReportByteLength > 0 || caps.FeatureReportByteLength > 0);
                 }
             }
             finally
@@ -254,6 +290,8 @@ internal static class HidNative
             IntPtr.Zero, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, IntPtr.Zero);
         if (handle.IsInvalid) return null;
 
-        return new HidStream(handle, collection.Path, collection.InReportLen, collection.OutReportLen);
+        HidD_GetPreparsedData(handle, out IntPtr preparsed);
+        return new HidStream(handle, collection.Path, collection.InReportLen, collection.OutReportLen,
+            collection.FeatReportLen, preparsed);
     }
 }

@@ -50,6 +50,8 @@ internal sealed class TrayHost : IDisposable
     private readonly BatteryPanel _panel;
     private readonly Icon _notifyIcon;
     private TrayMenuWindow _menu;
+    private long _menuClosedTick;
+    private SettingsWindow _settings;
     private AboutWindow _about;
     private Icon _currentIcon;
     private IntPtr _trayHwnd;
@@ -86,9 +88,17 @@ internal sealed class TrayHost : IDisposable
         monitor.DeviceOnline += OnDeviceOnline;
     }
 
-    private void ShowMenu()
+    internal void ShowMenu()
     {
-        if (_menu != null && _menu.IsVisible) return;
+        // 点击任务栏电量条会让菜单先因失焦关闭，紧接着的这一次右键不该再把它弹出来
+        if (Environment.TickCount64 - _menuClosedTick < 400) return;
+
+        // 菜单已经打开时再次右键（托盘或电量条）就关掉，行为像开关
+        if (_menu != null && _menu.IsVisible)
+        {
+            _menu.Close();
+            return;
+        }
 
         var menu = new TrayMenuWindow
         {
@@ -103,6 +113,7 @@ internal sealed class TrayHost : IDisposable
         menu.Closed += (_, _) =>
         {
             if (ReferenceEquals(_menu, menu)) _menu = null;
+            _menuClosedTick = Environment.TickCount64;
         };
         _menu = menu;
         menu.Show();
@@ -116,7 +127,21 @@ internal sealed class TrayHost : IDisposable
 
     private void OpenSettings()
     {
+        // 右键菜单在设置窗口的嵌套消息循环里仍然能弹出，这里保证只留一个设置窗口
+        if (_settings != null)
+        {
+            if (_settings.WindowState == System.Windows.WindowState.Minimized)
+                _settings.WindowState = System.Windows.WindowState.Normal;
+            _settings.Activate();
+            return;
+        }
+
         var window = new SettingsWindow(_monitor);
+        _settings = window;
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_settings, window)) _settings = null;
+        };
         window.ShowDialog();
     }
 
@@ -141,7 +166,7 @@ internal sealed class TrayHost : IDisposable
         string tip = rows.Count == 0
             ? "外设电量"
             : string.Join("  |  ", rows.Select(r =>
-                $"{r.Name} {r.PercentText}{(r.IsCharging ? " 充电中" : "")}"));
+                $"{r.Name} {r.PercentText}{(r.IsAsleep ? " 休眠" : r.IsCharging ? " 充电中" : "")}"));
         _icon.Text = tip.Length > 63 ? tip[..63] : tip;
 
         int level = rows.Where(r => r.Level >= 0).Select(r => r.Level).DefaultIfEmpty(-1).Min();
@@ -388,6 +413,7 @@ internal sealed class TrayHost : IDisposable
         _monitor.Updated -= OnUpdated;
         _monitor.DeviceOnline -= OnDeviceOnline;
         _menu?.Close();
+        _settings?.Close();
         _about?.Close();
         _icon.Visible = false;
         _icon.Dispose();
