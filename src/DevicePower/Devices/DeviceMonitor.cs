@@ -16,6 +16,15 @@ public sealed class DeviceMonitor
     private readonly Dictionary<string, IDeviceConnection> _connections = new();
     private readonly Dictionary<string, DeviceRow> _rows = new();
     private readonly HashSet<string> _knownKeys = new();
+
+    /// <summary>本轮读到电量的设备；只有读到过才算“在场”，读不到就从界面移除。</summary>
+    private readonly HashSet<string> _present = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>_present 的快照：轮询线程会改集合，界面只读快照。</summary>
+    private volatile HashSet<string> _presentSnapshot = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>整个进程只推一次上线通知：休眠唤醒、读数抖动都不再算新的连接。</summary>
+    private readonly HashSet<string> _announced = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource _cts;
     private CancellationTokenSource _delay;
 
@@ -32,11 +41,17 @@ public sealed class DeviceMonitor
 
     public ObservableCollection<DeviceRow> Rows { get; } = new();
 
+    /// <summary>发现过的全部设备（含被隐藏的）。设置页的显示开关绑它，Rows 只放显示中的。</summary>
+    public ObservableCollection<DeviceRow> Catalog { get; } = new();
+
     /// <summary>任务栏电量条用：每列最多两台设备，超出后另起一列。</summary>
     public ObservableCollection<DeviceColumn> Columns { get; } = new();
 
     /// <summary>任意一台设备读数变化时触发，界面已同步到 UI 线程。</summary>
     public event Action Updated;
+
+    /// <summary>设备从读不到恢复为读到电量（上线）时触发，界面已同步到 UI 线程。</summary>
+    public event Action<DeviceRow> DeviceOnline;
 
     /// <summary>设置保存后触发，用于切换任务栏 / 面板等显示方式。</summary>
     public event Action SettingsChanged;
@@ -58,16 +73,18 @@ public sealed class DeviceMonitor
     /// <summary>设置保存后调用：套用设备名称并重新拉一次读数。</summary>
     public void ApplySettings()
     {
+        HashSet<string> present = _presentSnapshot;
+
         RunOnUi(() =>
         {
             Look.Refresh();
-            foreach (DeviceRow row in Rows)
+            foreach (DeviceRow row in Catalog)
             {
                 row.Name = ResolveName(row.Key, row.DefaultName);
                 row.ApplyVisuals(Look);
             }
 
-            SyncNames();
+            SyncVisible(present);
         });
 
         RequestRefresh();
@@ -126,9 +143,14 @@ public sealed class DeviceMonitor
         }
 
         int reads = 0;
+        var cameOnline = new List<string>();
+        var wentOffline = new List<string>();
+        bool presenceChanged = false;
+        HashSet<string> presentSnapshot;
         lock (_ioLock)
         {
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
             foreach (HidCollection collection in collections
                          .OrderBy(c => MchoseConnection.Matches(c) ? 0 : 1))
@@ -141,12 +163,35 @@ public sealed class DeviceMonitor
                 foreach (DeviceDescriptor device in connection.Discover())
                 {
                     EnsureRow(device);
+                    seenKeys.Add(device.Key);
+
+                    // 隐藏的设备只登记进 Catalog 供设置页勾选，不读也不参与“在场”判定
+                    if (IsHidden(device.Key))
+                    {
+                        // 记成已通知：以后重新勾选时不该被当成一次“上线”再推
+                        _announced.Add(device.Key);
+                        if (_present.Remove(device.Key))
+                        {
+                            wentOffline.Add(device.Key);
+                            presenceChanged = true;
+                        }
+                        continue;
+                    }
 
                     BatteryReading? reading = connection.Read(device);
                     if (reading is BatteryReading value)
                     {
+                        if (_present.Add(device.Key)) presenceChanged = true;
                         Publish(device, value);
                         reads++;
+
+                        // 每台设备整个进程只推一次；中途读不到再恢复不算新的连接
+                        if (_announced.Add(device.Key)) cameOnline.Add(device.Key);
+                    }
+                    else if (_present.Remove(device.Key))
+                    {
+                        wentOffline.Add(device.Key);
+                        presenceChanged = true;
                     }
                 }
             }
@@ -156,6 +201,40 @@ public sealed class DeviceMonitor
                 _connections[path].Dispose();
                 _connections.Remove(path);
             }
+
+            // 接收器整个被拔掉时这台设备本轮根本没出现，也要按离线处理
+            foreach (string key in _present.Where(k => !seenKeys.Contains(k)).ToList())
+            {
+                _present.Remove(key);
+                wentOffline.Add(key);
+                presenceChanged = true;
+            }
+
+            presentSnapshot = new HashSet<string>(_present, StringComparer.OrdinalIgnoreCase);
+            _presentSnapshot = presentSnapshot;
+        }
+
+        if (presenceChanged)
+        {
+            RunOnUi(() =>
+            {
+                if (wentOffline.Count > 0)
+                {
+                    // 读不到就清场：读数和充电状态归零，再从电量条 / 面板移除
+                    foreach (string key in wentOffline)
+                    {
+                        ClearReading(key);
+                        DiagLog.WriteIfChanged("offline", $"{key} 读不到，已从界面移除");
+                    }
+                }
+
+                SyncVisible(presentSnapshot);
+
+                // 只有本次进程里第一次读到电量时才推，隐藏设备的 key 早已记进 _announced
+                foreach (string key in cameOnline)
+                    if (_rows.TryGetValue(key, out DeviceRow row))
+                        DeviceOnline?.Invoke(row);
+            });
         }
 
         return reads;
@@ -189,8 +268,7 @@ public sealed class DeviceMonitor
             row.ApplyVisuals(Look);
 
             _rows[device.Key] = row;
-            Rows.Add(row);
-            RebuildColumns();
+            Catalog.Add(row);
             Updated?.Invoke();
         });
     }
@@ -199,20 +277,40 @@ public sealed class DeviceMonitor
     {
         RunOnUi(() =>
         {
-            if (!_rows.TryGetValue(device.Key, out DeviceRow row))
-            {
-                row = new DeviceRow(device.Key, device.Family, device.DefaultName,
-                    ResolveName(device.Key, device.DefaultName));
-                _rows[device.Key] = row;
-                Rows.Add(row);
-                RebuildColumns();
-            }
+            if (!_rows.TryGetValue(device.Key, out DeviceRow row)) return;
 
             row.IsCharging = reading.IsCharging;
             row.Level = reading.Level;
             row.ApplyVisuals(Look);
             Updated?.Invoke();
         });
+    }
+
+    private bool IsHidden(string key) =>
+        Settings.HiddenDevices != null &&
+        Settings.HiddenDevices.Contains(key, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>读不到电量时把行清干净，避免低电量颜色、充电标记留在界面上。</summary>
+    private void ClearReading(string key)
+    {
+        if (!_rows.TryGetValue(key, out DeviceRow row)) return;
+        row.Level = -1;
+        row.IsCharging = false;
+    }
+
+    /// <summary>
+    /// 按 Catalog 顺序重排显示中的行：只有在场且没被隐藏的设备才进 Rows，
+    /// 界面、低电量提醒、托盘图标都看不到离线设备。
+    /// </summary>
+    private void SyncVisible(HashSet<string> present)
+    {
+        Rows.Clear();
+        foreach (DeviceRow row in Catalog)
+            if (present.Contains(row.Key) && !IsHidden(row.Key))
+                Rows.Add(row);
+
+        RebuildColumns();
+        Updated?.Invoke();
     }
 
     private void RebuildColumns()

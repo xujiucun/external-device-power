@@ -18,9 +18,19 @@ public sealed class AppSettings
     /// <summary>按设备 Key 保存的自定义名称。</summary>
     public Dictionary<string, string> DeviceNames { get; set; } = new();
 
+    /// <summary>被隐藏的设备 Key：不显示，后台也不再轮询它。</summary>
+    public List<string> HiddenDevices { get; set; } = new();
+
+    /// <summary>首次启动的唤醒提示是否已经弹过，每台机器只弹一次。</summary>
+    public bool WakeTipShown { get; set; }
+
     public int PollSeconds { get; set; } = 5;
     public int LowThreshold { get; set; } = 20;
     public int CriticalThreshold { get; set; } = 10;
+
+    /// <summary>设备从读不到恢复为读到电量（上线）时推送托盘通知。</summary>
+    public bool NotifyOnline { get; set; } = true;
+
     public bool AutoStart { get; set; }
 
     /// <summary>taskbar = 任务栏内；panel = 浮动面板。</summary>
@@ -103,6 +113,8 @@ public sealed class AppSettings
                 ? pair.Value.Trim()[..24]
                 : pair.Value.Trim();
         }
+        HiddenDevices ??= new List<string>();
+        HiddenDevices.RemoveAll(key => string.IsNullOrWhiteSpace(key));
         PollSeconds = Math.Clamp(PollSeconds, 2, 60);
         LowThreshold = Math.Clamp(LowThreshold, 5, 50);
         CriticalThreshold = Math.Clamp(CriticalThreshold, 1, Math.Min(20, LowThreshold));

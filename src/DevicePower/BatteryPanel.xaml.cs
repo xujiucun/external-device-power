@@ -13,10 +13,15 @@ public partial class BatteryPanel : Window
         InitializeComponent();
         _monitor = monitor;
         Rows.ItemsSource = monitor.Rows;
+        monitor.Rows.CollectionChanged += (_, _) => UpdateEmptyText();
+        UpdateEmptyText();
 
         // 开机时还没有设备行，按空面板定的位；行出来后面板变宽，不重新定位就会溢出屏幕右边
         SizeChanged += (_, _) => PlaceBottomRight();
     }
+
+    private void UpdateEmptyText() =>
+        EmptyText.Visibility = _monitor.Rows.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>固定在任务栏上方的右下角。</summary>
     public void ShowNearTray()
@@ -40,7 +45,7 @@ public partial class BatteryPanel : Window
         var window = new SettingsWindow(_monitor);
         try
         {
-            window.Owner = this;
+            // 不设 Owner：面板是 topmost，被拥有窗口会继承 topmost，设置页就压住别的窗口了
             window.ShowDialog();
         }
         finally

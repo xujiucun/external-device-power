@@ -19,7 +19,12 @@
         <Border.Effect>
             <DropShadowEffect BlurRadius="24" ShadowDepth="6" Opacity="0.45" Color="Black" />
         </Border.Effect>
-        <ItemsControl x:Name="Rows">
+        <StackPanel>
+            <TextBlock x:Name="EmptyText" Visibility="Collapsed"
+                       Foreground="#A2A7AF" FontSize="13" TextWrapping="Wrap" MaxWidth="240"
+                       Margin="0,2,0,4"
+                       Text="没有显示中的设备：右键打开设置，勾选要显示的设备。" />
+            <ItemsControl x:Name="Rows">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>
                     <Grid Height="{Binding Source={StaticResource Look}, Path=PanelRowHeight}" Margin="0,3">
@@ -56,6 +61,7 @@
                     </Grid>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
-        </ItemsControl>
+            </ItemsControl>
+        </StackPanel>
     </Border>
 </Window>

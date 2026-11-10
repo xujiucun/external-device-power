@@ -5,6 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using DevicePower.Devices;
@@ -16,12 +17,43 @@ internal sealed class TrayHost : IDisposable
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool DestroyIcon(IntPtr handle);
 
+    private const uint NimModify = 0x1;
+    private const uint NifInfo = 0x10;
+    private const uint NiifUser = 0x4;
+    private const uint NiifLargeIcon = 0x20;
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern bool Shell_NotifyIcon(uint message, ref NotifyIconData data);
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct NotifyIconData
+    {
+        public int cbSize;
+        public IntPtr hWnd;
+        public uint uID;
+        public uint uFlags;
+        public uint uCallbackMessage;
+        public IntPtr hIcon;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string szTip;
+        public uint dwState;
+        public uint dwStateMask;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string szInfo;
+        public uint uTimeoutOrVersion;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string szInfoTitle;
+        public uint dwInfoFlags;
+        public Guid guidItem;
+        public IntPtr hBalloonIcon;
+    }
+
     private readonly NotifyIcon _icon;
     private readonly DeviceMonitor _monitor;
     private readonly BatteryPanel _panel;
+    private readonly Icon _notifyIcon;
     private TrayMenuWindow _menu;
     private AboutWindow _about;
     private Icon _currentIcon;
+    private IntPtr _trayHwnd;
+    private uint _trayId;
     private Bitmap _logo;
     private string _logoPath;
     private DateTime _logoStamp;
@@ -34,6 +66,7 @@ internal sealed class TrayHost : IDisposable
         _panel = panel;
 
         _currentIcon = CreateTrayIcon(-1);
+        _notifyIcon = LoadNotifyIcon();
         _icon = new NotifyIcon
         {
             Visible = true,
@@ -50,6 +83,7 @@ internal sealed class TrayHost : IDisposable
         };
 
         monitor.Updated += OnUpdated;
+        monitor.DeviceOnline += OnDeviceOnline;
     }
 
     private void ShowMenu()
@@ -114,13 +148,18 @@ internal sealed class TrayHost : IDisposable
         if (level != _iconLevel)
         {
             _iconLevel = level;
-            Icon icon = CreateTrayIcon(level);
-            _icon.Icon = icon;
-            _currentIcon?.Dispose();
-            _currentIcon = icon;
+            ApplyTrayIcon(level);
         }
 
         CheckWarnings(rows);
+    }
+
+    private void ApplyTrayIcon(int level)
+    {
+        Icon icon = CreateTrayIcon(level);
+        _icon.Icon = icon;
+        _currentIcon?.Dispose();
+        _currentIcon = icon;
     }
 
     private void CheckWarnings(List<DeviceRow> rows)
@@ -151,8 +190,78 @@ internal sealed class TrayHost : IDisposable
         }
     }
 
-    private void Notify(string title, string text) =>
-        _icon.ShowBalloonTip(5000, title, text, ToolTipIcon.Warning);
+    private void OnDeviceOnline(DeviceRow row)
+    {
+        bool on = _monitor.Settings.NotifyOnline;
+        DiagLog.WriteIfChanged("online", $"{row.Key} level={row.Level} notify={(on ? 1 : 0)}");
+        if (!on) return;
+        Notify("设备已上线", $"{row.Name} 已连接，当前电量 {row.PercentText}", ToolTipIcon.Info);
+    }
+
+    private void Notify(string title, string text, ToolTipIcon icon = ToolTipIcon.Warning)
+    {
+        // 用 Shell_NotifyIcon 的 NIIF_USER + hBalloonIcon 指定通知图片（hlogo），
+        // NotifyIcon.ShowBalloonTip 不支持自定义 balloon 图标，只能退回系统默认图标
+        if (TryShowBalloon(title, text)) return;
+
+        _icon.ShowBalloonTip(5000, title, text, icon);
+    }
+
+    private bool TryShowBalloon(string title, string text)
+    {
+        if (_notifyIcon == null || !ResolveTrayTarget()) return false;
+
+        var data = new NotifyIconData
+        {
+            cbSize = Marshal.SizeOf<NotifyIconData>(),
+            hWnd = _trayHwnd,
+            uID = _trayId,
+            uFlags = NifInfo,
+            hIcon = IntPtr.Zero,
+            szTip = "",
+            szInfo = Truncate(text, 255),
+            uTimeoutOrVersion = 5000,
+            szInfoTitle = Truncate(title, 63),
+            dwInfoFlags = NiifUser | NiifLargeIcon,
+            hBalloonIcon = _notifyIcon.Handle,
+        };
+
+        return Shell_NotifyIcon(NimModify, ref data);
+    }
+
+    private bool ResolveTrayTarget()
+    {
+        if (_trayHwnd != IntPtr.Zero) return true;
+        if (_icon == null) return false;
+
+        const BindingFlags Flags = BindingFlags.NonPublic | BindingFlags.Instance;
+        FieldInfo windowField = typeof(NotifyIcon).GetField("_window", Flags);
+        FieldInfo idField = typeof(NotifyIcon).GetField("_id", Flags);
+        if (windowField?.GetValue(_icon) is not NativeWindow window || idField == null) return false;
+
+        _trayHwnd = window.Handle;
+        _trayId = (uint)idField.GetValue(_icon);
+        return _trayHwnd != IntPtr.Zero;
+    }
+
+    private static string Truncate(string value, int max) =>
+        string.IsNullOrEmpty(value) || value.Length <= max ? value ?? "" : value[..max];
+
+    private static Icon LoadNotifyIcon()
+    {
+        try
+        {
+            var resource = System.Windows.Application.GetResourceStream(
+                new Uri("pack://application:,,,/Assets/hlogo.ico"));
+            if (resource?.Stream == null) return null;
+
+            using (Stream stream = resource.Stream) return new Icon(stream, new Size(32, 32));
+        }
+        catch
+        {
+            return null;
+        }
+    }
 
     private Icon CreateTrayIcon(int level)
     {
@@ -277,10 +386,12 @@ internal sealed class TrayHost : IDisposable
     public void Dispose()
     {
         _monitor.Updated -= OnUpdated;
+        _monitor.DeviceOnline -= OnDeviceOnline;
         _menu?.Close();
         _about?.Close();
         _icon.Visible = false;
         _icon.Dispose();
+        _notifyIcon?.Dispose();
         _currentIcon?.Dispose();
         _logo?.Dispose();
     }

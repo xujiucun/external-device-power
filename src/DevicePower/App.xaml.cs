@@ -37,6 +37,15 @@ public partial class App : Application
         _monitor.Start();
         ApplyDisplayMode();
 
+        if (!settings.WakeTipShown)
+        {
+            // 先落标记再弹：就算这次进程被直接结束，下次启动也不会再弹
+            settings.WakeTipShown = true;
+            settings.Save();
+            Dispatcher.BeginInvoke(new Action(() => new WakeTipWindow().ShowDialog()),
+                DispatcherPriority.Background);
+        }
+
         // 电量条由 dock 自己每秒判全屏；浮动面板没有定时器，这里统一盯一下
         _fullscreenTimer = new DispatcherTimer(DispatcherPriority.Background)
         {

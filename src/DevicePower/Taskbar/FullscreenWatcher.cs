@@ -62,6 +62,32 @@ internal static class FullscreenWatcher
     public static string CoveringReason(IntPtr self) => Probe(self, false);
 
     /// <summary>
+    /// 开始菜单/搜索是否正在显示。Win11 打开开始菜单时任务栏会被提到更高的窗口层，
+    /// 普通置顶窗口会被它盖住；这里用于主动隐藏，避免“状态显示可见、实际被盖住”。
+    /// 关闭后 SearchHost 窗口可能仍是前台且 IsWindowVisible=true，但会被 DWM cloak，
+    /// 所以必须同时检查 cloak，否则会一直隐藏到用户点击别处。
+    /// </summary>
+    public static bool IsStartMenuOpen()
+    {
+        IntPtr foreground = GetForegroundWindow();
+        if (foreground == IntPtr.Zero) return false;
+
+        // 关闭开始菜单后，SearchHost 的窗口仍然存在且 IsWindowVisible 为 true，
+        // 但会被 DWM cloak（cloak=2）；必须把这种情况排除，否则会一直保持隐藏。
+        if (!IsWindowVisible(foreground)) return false;
+        if (DwmGetWindowAttribute(foreground, 14 /* DWMWA_CLOAKED */, out int cloaked, 4) == 0 && cloaked != 0)
+            return false;
+
+        if (!string.Equals(ClassName(foreground), "Windows.UI.Core.CoreWindow", StringComparison.Ordinal))
+            return false;
+
+        string exe = ExeName(foreground);
+        return string.Equals(exe, "SearchHost.exe", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(exe, "StartMenuExperienceHost.exe", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(exe, "ShellExperienceHost.exe", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// 截图/覆盖层：铺满屏幕的工具窗口（系统截图、Snipaste）或已知截图进程（微信画布）。
     /// 这段时间任务栏托盘区会临时变窄，电量条跟着重算就会"自己往左跑"，所以要冻结位置。
     /// </summary>
@@ -152,6 +178,12 @@ internal static class FullscreenWatcher
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hwnd);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out int value, int size);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder text, int maxCount);

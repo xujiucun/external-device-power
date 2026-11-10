@@ -52,6 +52,7 @@ internal sealed class TaskbarDock : IDisposable
     private int _targetTop;
     private bool _hasTarget;
     private int _hideStreak;
+    private int _normalBand = -1;
     private bool _disposed;
 
     public TaskbarDock(DeviceMonitor monitor)
@@ -204,6 +205,44 @@ internal sealed class TaskbarDock : IDisposable
         {
             if (_strip.IsVisible) _strip.Hide();
             return;
+        }
+
+        // 全部设备都读不到时整条隐藏：否则任务栏上只剩一个透明的空壳窗口
+        if (_monitor.Rows.Count == 0)
+        {
+            _hideStreak = 0;
+            _lastX = int.MinValue;
+            _lastY = int.MinValue;
+            _currentLeft = double.NaN;
+            _hasTarget = false;
+            if (_strip.IsVisible) _strip.Hide();
+            return;
+        }
+
+        // 开始菜单/搜索显示时先整体隐藏（避免被它的全屏宿主盖住）
+        if (FullscreenWatcher.IsStartMenuOpen())
+        {
+            HideForShellOverlay("start-menu");
+            return;
+        }
+
+        // 关闭开始菜单后任务栏可能仍停留在更高 band（实测不会自己恢复，要焦点切走才降回 1）。
+        // 这期间置顶窗口仍会被任务栏盖住，所以保持隐藏；等 band 恢复正常后
+        // 再按原位置显示，避免把电量条画到任务栏外面。
+        if (GetWindowBand(taskbar, out uint band))
+        {
+            if (_normalBand < 0)
+            {
+                // 正常情况下任务栏在 ZBID_DESKTOP(1)；如果程序启动时恰好处于
+                // 开始菜单等高层 band，就按桌面 band 兜底，避免把异常值当成基准
+                _normalBand = band <= 2 ? (int)band : 1;
+            }
+
+            if ((int)band != _normalBand)
+            {
+                HideForShellOverlay("wait-band=" + band);
+                return;
+            }
         }
 
         RECT tb;
@@ -383,6 +422,17 @@ internal sealed class TaskbarDock : IDisposable
         SetWindowPos(_hwnd, HwndTopmost, left, top, 0, 0, SwpNoSize | SwpNoActivate);
     }
 
+    private void HideForShellOverlay(string reason)
+    {
+        _hideStreak = 0;
+        _lastX = int.MinValue;
+        _lastY = int.MinValue;
+        _currentLeft = double.NaN;
+        _hasTarget = false;
+        if (_strip.IsVisible) _strip.Hide();
+        Log("hidden: " + reason);
+    }
+
     /// <summary>返回 null 表示该显示；否则给出隐藏原因，方便在家用电脑上查“面板不见了”到底是谁干的。</summary>
     private static string HideReason(RECT tb, MONITORINFO monitor, out int state)
     {
@@ -527,6 +577,9 @@ internal sealed class TaskbarDock : IDisposable
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll", EntryPoint = "GetWindowBand")]
+    private static extern bool GetWindowBand(IntPtr hWnd, out uint band);
 
     [DllImport("shell32.dll")]
     private static extern int SHQueryUserNotificationState(out int state);

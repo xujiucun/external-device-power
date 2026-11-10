@@ -25,11 +25,18 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         _monitor = monitor;
 
+        // 内容比屏幕高时窗口封顶，中间区域滚动，底部按钮始终可见
+        MaxHeight = Math.Max(520, Math.Min(SystemParameters.WorkArea.Height - 48, 760));
+
+        BodyScroll.ScrollChanged += (_, _) => UpdateBottomFade();
+        Loaded += (_, _) => UpdateBottomFade();
+
         var settings = monitor.Settings;
-        _nameEdits = new ObservableCollection<NameEdit>(monitor.Rows.Select(row => new NameEdit(row)));
+        _nameEdits = new ObservableCollection<NameEdit>(
+            monitor.Catalog.Select(row => new NameEdit(row, IsShown(row.Key))));
         DeviceList.ItemsSource = _nameEdits;
-        monitor.Rows.CollectionChanged += OnRowsChanged;
-        Closed += (_, _) => monitor.Rows.CollectionChanged -= OnRowsChanged;
+        monitor.Catalog.CollectionChanged += OnRowsChanged;
+        Closed += (_, _) => monitor.Catalog.CollectionChanged -= OnRowsChanged;
         UpdateNoDeviceText();
 
         IntervalSlider.Value = settings.PollSeconds;
@@ -43,6 +50,7 @@ public partial class SettingsWindow : Window
         SideRight.IsChecked = settings.TaskbarSide != "left";
         SideLeft.IsChecked = settings.TaskbarSide == "left";
         FullscreenBox.IsChecked = settings.HideOnFullscreen;
+        OnlineBox.IsChecked = settings.NotifyOnline;
 
         IntervalSlider.ValueChanged += (_, _) => UpdateReadouts();
         LowSlider.ValueChanged += (_, _) => UpdateReadouts();
@@ -159,23 +167,35 @@ public partial class SettingsWindow : Window
 
     private void OnRowsChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
-        foreach (DeviceRow row in _monitor.Rows)
+        foreach (DeviceRow row in _monitor.Catalog)
         {
             if (_nameEdits.Any(edit => ReferenceEquals(edit.Row, row))) continue;
-            _nameEdits.Add(new NameEdit(row));
+            _nameEdits.Add(new NameEdit(row, IsShown(row.Key)));
         }
 
         UpdateNoDeviceText();
     }
+
+    private bool IsShown(string key) =>
+        !_monitor.Settings.HiddenDevices.Contains(key, StringComparer.OrdinalIgnoreCase);
 
     private void UpdateNoDeviceText() =>
         NoDeviceText.Visibility = _nameEdits.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
     private void UpdateCalibrationText()
     {
-        if (_monitor.Rows.Count == 0)
+        if (_monitor.Catalog.Count == 0)
         {
             CalibrationText.Text = "还没发现设备：插好接收器、唤醒设备后再点「重新读取」。";
+            return;
+        }
+
+        if (_monitor.Rows.Count == 0)
+        {
+            bool allHidden = _monitor.Catalog.All(row => !IsShown(row.Key));
+            CalibrationText.Text = allHidden
+                ? "设备都被隐藏了：勾选上面的「显示」后恢复读数。"
+                : "还没读到电量：设备可能在休眠或已断开，唤醒设备后会重新出现。";
             return;
         }
 
@@ -192,12 +212,19 @@ public partial class SettingsWindow : Window
         {
             int count = await _monitor.ReadNowAsync();
             UpdateCalibrationText();
-            if (count == 0) CalibrationText.Text += "（没收到回包，设备可能在休眠）";
+            if (count == 0 && _monitor.Rows.Count > 0) CalibrationText.Text += "（没收到回包，设备可能在休眠）";
         }
         finally
         {
             ReReadButton.IsEnabled = true;
         }
+    }
+
+    private void UpdateBottomFade()
+    {
+        bool hasMore = BodyScroll.ScrollableHeight > 1 &&
+                       BodyScroll.VerticalOffset < BodyScroll.ScrollableHeight - 1;
+        BottomFade.Visibility = hasMore ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void UpdateTrayIconText() =>
@@ -255,8 +282,10 @@ public partial class SettingsWindow : Window
             settings.DeviceNames[edit.Row.Key] = name;
         }
 
-        DeviceRow mchose = _monitor.Rows.FirstOrDefault(row => row.Family == "mchose");
+        DeviceRow mchose = _monitor.Catalog.FirstOrDefault(row => row.Family == "mchose");
         if (mchose != null) settings.DeviceName = mchose.Name;
+
+        settings.HiddenDevices = _nameEdits.Where(edit => !edit.Visible).Select(edit => edit.Row.Key).ToList();
 
         settings.PollSeconds = (int)IntervalSlider.Value;
         settings.LowThreshold = (int)LowSlider.Value;
@@ -266,6 +295,7 @@ public partial class SettingsWindow : Window
         settings.DisplayMode = ModePanel.IsChecked == true ? "panel" : "taskbar";
         settings.TaskbarSide = SideLeft.IsChecked == true ? "left" : "right";
         settings.HideOnFullscreen = FullscreenBox.IsChecked == true;
+        settings.NotifyOnline = OnlineBox.IsChecked == true;
         settings.TextColor = CheckedValue(Group("TextColor"), _customColor);
         settings.TextScale = Math.Round(ScaleSlider.Value / 100.0, 2);
         settings.TextWeight = CheckedValue(Group("TextWeight"), "semibold");
@@ -283,24 +313,52 @@ public partial class SettingsWindow : Window
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => DialogResult = false;
 
-    private void Header_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void Chrome_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (e.ButtonState == MouseButtonState.Pressed) DragMove();
+        if (e.ButtonState != MouseButtonState.Pressed) return;
+
+        // 点在输入框 / 勾选 / 单选 / 滑块 / 按钮 / 滚动条上时不抢拖动，否则没法选字和操作控件；
+        // 其余地方（标题、标签、空白）按下即拖，不用只盯标题栏
+        for (DependencyObject node = e.OriginalSource as DependencyObject;
+             node != null;
+             node = System.Windows.Media.VisualTreeHelper.GetParent(node))
+        {
+            if (node is System.Windows.Controls.Primitives.TextBoxBase ||
+                node is System.Windows.Controls.Primitives.ButtonBase ||
+                node is System.Windows.Controls.Primitives.RangeBase ||
+                node is System.Windows.Controls.Primitives.ScrollBar ||
+                node is System.Windows.Controls.Primitives.Thumb) return;
+        }
+
+        DragMove();
     }
 
     private sealed class NameEdit : INotifyPropertyChanged
     {
         private string _name;
+        private bool _visible;
 
-        public NameEdit(DeviceRow row)
+        public NameEdit(DeviceRow row, bool visible)
         {
             Row = row;
             _name = row.Name;
+            _visible = visible;
         }
 
         public DeviceRow Row { get; }
 
         public string FamilyLabel => Row.FamilyLabel;
+
+        public bool Visible
+        {
+            get => _visible;
+            set
+            {
+                if (_visible == value) return;
+                _visible = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Visible)));
+            }
+        }
 
         public string Name
         {

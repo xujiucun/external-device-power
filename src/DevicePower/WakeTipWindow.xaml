@@ -1,0 +1,111 @@
+<Window x:Class="DevicePower.WakeTipWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="使用前提示"
+        Icon="pack://application:,,,/Assets/hlogo.ico"
+        Width="460"
+        SizeToContent="Height"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize"
+        ShowInTaskbar="True"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        FontFamily="Microsoft YaHei UI"
+        FontSize="14"
+        TextOptions.TextFormattingMode="Display"
+        UseLayoutRounding="True">
+    <Window.Resources>
+        <Style x:Key="PrimaryButton" TargetType="Button">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="Background" Value="#2F6BFF" />
+            <Setter Property="BorderBrush" Value="#5C8CFF" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="15,7" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="9"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#4A7DFF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2550C4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="Foreground" Value="#B3FFFFFF" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" CornerRadius="9" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#2EFFFFFF" />
+                                <Setter Property="Foreground" Value="White" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="BodyStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#DEE1E6" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+    </Window.Resources>
+
+    <Border CornerRadius="18"
+            Background="#FA202020"
+            BorderBrush="#38FFFFFF"
+            BorderThickness="1"
+            Padding="28,22"
+            Margin="18">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="32" ShadowDepth="9" Opacity="0.55" Color="Black" />
+        </Border.Effect>
+        <StackPanel>
+            <Grid Background="Transparent" MouseLeftButtonDown="Header_MouseLeftButtonDown" Margin="0,0,0,10">
+                <TextBlock Text="开始使用前" FontSize="21" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" />
+                <Button Content="✕" Width="32" Height="32" HorizontalAlignment="Right"
+                        Style="{StaticResource IconButton}" Click="Close_Click" />
+            </Grid>
+
+            <TextBlock Style="{StaticResource BodyStyle}"
+                       Text="电量是键盘 / 鼠标固件报给接收器的。设备休眠时不回包，读数会一直是 -- 或停在旧值，这不是程序故障。" />
+            <TextBlock Style="{StaticResource BodyStyle}"
+                       Text="动一下鼠标、按任意键把设备唤醒，一个刷新间隔（默认 5 秒）内就会出现读数。" />
+            <TextBlock Style="{StaticResource BodyStyle}" Margin="0,0,0,16"
+                       Text="这条提示只出现一次。之后想手动试一次，可以在设置里点「重新读取」。" />
+
+            <Button Content="知道了" Width="96" Height="38" HorizontalAlignment="Right"
+                    Style="{StaticResource PrimaryButton}" Click="Close_Click" />
+        </StackPanel>
+    </Border>
+</Window>

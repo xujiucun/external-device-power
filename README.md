@@ -36,10 +36,15 @@ Windows 托盘小工具：直接在任务栏里显示无线键盘 / 鼠标的电
 
 - **任务栏内嵌电量条**（Win11）：顶层透明窗口贴在托盘左侧，也可放到开始按钮左侧；一列最多两台、超出向左加列。列宽按实测内容算，所以读数在 `87%` 和 `100%` 之间变化时**不会有任何位移**；改名会让条子伸缩，左边缘用 180ms 缓入缓出滑到位
 - **浮动面板**：固定在任务栏上方右下角，列表式，可同时显示多台
+- **读不到就移除**：设备休眠、没电或拔掉接收器后，下一轮读不到电量就从电量条和面板里消失（读数和充电标记一起清零）；重新读到电量再出现。全部设备都读不到时整条电量条隐藏，不会留空壳
+- **按设备显示 / 隐藏**：设置里每台设备一个「显示」勾选。取消勾选后它不再出现在电量条 / 面板上，后台也不再读取它的电量；重新勾选后下一次刷新恢复读数
+- **首次启动提示**：第一次运行弹一次说明——设备休眠时固件不回包、读不到电量，唤醒设备后一个刷新间隔内出读数；标记存进配置，之后不再弹
 - **全屏自动隐藏**：有窗口铺满整块屏幕（全屏游戏、无边框全屏）时，电量条和浮动面板都消失，退出后自动回来；设置里可以关掉
 - **托盘图标** + 自绘深色右键菜单（设置 / 显示·隐藏浮动面板 / 立即刷新 / 关于 / 退出）
 - **低电量提醒**：两档可调阈值，跌破时右下角系统通知 + 百分比变黄/变红 + 托盘图标右下角加黄/红点；充电中不提醒，同一档只提醒一次
+- **设备上线通知**：每次启动程序后，每台设备在第一次读到电量时推一条系统通知，带设备名和当前电量；之后休眠唤醒、读数抖动都不再重复推。设置「读数与提醒」里可关，默认开。隐藏的设备不轮询，重新勾选也不会因此补推。通知正文图片使用程序自己的 `hlogo.ico`
 - **外观可定制**：文字颜色（色板 + 系统取色器）、大小（80–160%）、名称粗细、排版（名称在前 / 图标在前 / 隐藏名称）、电量图形（电池 / 条形 / 圆环 / 分段 / 不显示）、充电状态样式（绿色填充 / 绿色描边 / 数字变绿 / 不区分）、可选 200ms 宽度补间
+- **设置页**：自绘深色界面，Switch 开关、分组标题和固定底部操作栏；内容超过一屏时中间区域滚动，按钮始终可见
 - **读数不做平滑**：屏幕上就是设备固件给的原始值。不做低通滤波，因为电压法电量在末期会突降，滤波只会让你看到偏高的数字
 
 ## 支持的设备
@@ -56,9 +61,17 @@ Windows 托盘小工具：直接在任务栏里显示无线键盘 / 鼠标的电
 - **充电时读数偏高**：K99 V2 的百分比是固件按电压查表算的，插上线电压被抬高，同一块电实测充电时约 +3%。程序不做修正。
 - **全屏隐藏不靠 QUNS**：`SHQueryUserNotificationState` 只在 DX 独占全屏时报 3，英雄联盟这类“无边框全屏”始终停在 5（家用机上它还会在 2 和 5 之间抖，所以 2 也不采信）。现在的判定是直接量前台窗口矩形：铺满它所在整块显示器 = 全屏，桌面 / 任务栏一类外壳窗口按窗口类名排除，副屏全屏不影响主屏。判定结果会写进 `dock.log`（`reason=<窗口类名 宽x高 进程名>`、`panel hidden by ...`），出问题时把这行贴过来就能定位。要连续 5 秒判定成立才真隐藏，一闪而过的窗口不会把条子藏掉。
 - **截图时不隐藏、也不位移**：系统截图和 Snipaste 的选区层带 `WS_EX_TOOLWINDOW`，微信 / QQ / PixPin 的画布是普通窗口、几何上和无边框全屏游戏一模一样，只能按进程名区分（`Weixin.exe`、`WeChat.exe`、`QQ.exe`、`Snipaste.exe`、`PixPin.exe`）。这两类铺满屏幕时只**冻结位置**、不隐藏：覆盖层一出现，托盘区会自己窄掉一个图标位（实测 28px），此时跟着重算就会看到条子往左滑一下再滑回来。日志里对应 `position frozen by ...`。
-- **任务栏层级**：Win11 的任务栏自身也是 topmost，被激活时会盖住电量条约几十毫秒；程序在焦点变化后以 4ms 粒度重新压层级。
+- **任务栏层级与开始菜单**：Win11 的任务栏自身也是 topmost，被激活时会盖住电量条约几十毫秒；程序在焦点变化后以 4ms 粒度重新压层级。打开开始菜单 / 搜索时电量条会主动隐藏；关闭后如果任务栏仍停留在更高窗口层（band 6，实测不会自行恢复），电量条继续保持隐藏，直到焦点切到其他窗口、任务栏回到正常层，再在**原位置**出现（不会浮到任务栏上方）。
 - **未代码签名**：首次运行可能撞 SmartScreen（“更多信息 → 仍要运行”）。
 - **配置按机器独立**：`%APPDATA%\DevicePower\settings.json`；停靠诊断日志 `%APPDATA%\DevicePower\dock.log`（只在判定变化时写一行）。
+
+## 已知问题
+
+- **开始菜单关闭后电量条不会立刻回来**：Win11 关闭开始菜单后任务栏可能仍停在 band 6，只有焦点离开任务栏（点一下别的窗口）才降回正常层，电量条随后在原位恢复。这是 WPF 顶层窗口受任务栏层级限制导致的；要让它在关闭瞬间就出现，需要像 TrafficMonitor 那样改用 DirectComposition 原生渲染，0.0.1 不做。
+- **罗技设备不区分键盘 / 鼠标**：默认名是「接收器产品名 + 槽位号」，不是真实设备类型。已扫描过的接收器不会重新扫描槽位，后配对的设备可能需要重插接收器或重启程序才会出现。
+- **不支持蓝牙**：只读 2.4G 接收器的 HID 报表。
+- **设置页需要滚动**：字号放大后内容高度超过一屏，中间区域滚动，底部按钮固定。
+- **当前仓库代码比 V0.0.1 发布包新**：下载区的两个 zip 还是旧包，重新发版前需要重新构建 `dist`。
 
 ## 构建与运行
 
@@ -79,12 +92,6 @@ dotnet publish src/DevicePower/DevicePower.csproj -c Release -r win-x64 --self-c
 dotnet publish src/DevicePower/DevicePower.csproj -c Release -r win-x64 --self-contained true -o publish-selfcontained
 ```
 
-开发时预览“多台设备同时显示”的排版，不用真的插两只鼠标：
-
-```bash
-set DEVICEPOWER_SIM_GPW=42c    # 数字 = 电量，末尾 c 表示充电中；不带这个变量就不会出现假设备
-```
-
 ## 技术栈
 
 .NET 8 / WPF（控件、菜单、设置页、关于页全部自绘）+ WinForms `NotifyIcon` + Win32 HID API（P/Invoke）。**没有第三方依赖。**
@@ -93,23 +100,33 @@ set DEVICEPOWER_SIM_GPW=42c    # 数字 = 电量，末尾 c 表示充电中；�
 
 ```
 src/DevicePower/
-├── App.xaml(.cs)              启动、托盘/面板/停靠的装配
+├── DevicePower.csproj         工程（net8.0-windows，WPF+WinForms，x64，RollForward=LatestMajor）
+├── App.xaml(.cs)              启动、托盘/面板/停靠的装配、全屏看门狗定时器
 ├── BatteryGlyph.cs            自绘电量图形（电池/条形/圆环/分段）
-├── BatteryPanel.xaml(.cs)     浮动面板
+├── BatteryPanel.xaml(.cs)     浮动面板（右下角列表，右键开设置）
 ├── SettingsWindow.xaml(.cs)   设置页
+├── WakeTipWindow.xaml(.cs)    首次启动的一次性唤醒提示弹窗
 ├── AboutWindow.xaml(.cs)      关于页（版本、功能、仓库地址）
-├── TrayHost.cs                托盘图标、提示、低电量判定
+├── TrayHost.cs                托盘图标、悬浮提示、低电量提醒、设备上线通知（图片使用 hlogo）
 ├── TrayMenuWindow.xaml(.cs)   自绘右键菜单
+├── DiagLog.cs                 诊断日志（%APPDATA%\DevicePower\dock.log，只在变化时写一行）
+├── Assets/                    hlogo.ico（程序图标）、tray.ico（托盘默认图标）
 ├── Devices/                   设备抽象、轮询、外观换算
-│   ├── DeviceMonitor.cs       轮询循环 + 读数发布
-│   ├── MchoseConnection.cs    迈从接收器协议
-│   ├── LogitechConnection.cs  HID++ 2.0
-│   └── DisplayLook.cs         外观设置 → 可绑定值（含文字测量）
+│   ├── DeviceMonitor.cs       轮询循环 + 读数发布 + 读不到移除 + 显示/隐藏 + 每进程只推一次上线
+│   ├── DeviceConnection.cs    IDeviceConnection 接口 + DeviceDescriptor + BatteryReading
+│   ├── MchoseConnection.cs    迈从接收器私有 HID 协议
+│   ├── LogitechConnection.cs  HID++ 2.0（Lightspeed / Unifying）
+│   ├── DeviceRow.cs           单台设备的可绑定视图模型
+│   ├── DeviceColumn.cs        任务栏一列（最多两台）
+│   └── DisplayLook.cs         外观设置 → 可绑定值（含文字测量、列宽）
 ├── Taskbar/                   任务栏电量条与停靠
 │   ├── TaskbarStrip.xaml(.cs) 电量条窗口
-│   └── TaskbarDock.cs         跟随任务栏定位、层级压制、位置缓动
-├── Hid/HidNative.cs           HID 枚举与读写
-└── Settings/AppSettings.cs    配置读写与规范化
+│   ├── TaskbarDock.cs         跟随任务栏定位、开始菜单/band 等待、层级压制、位置缓动、截图冻结
+│   └── FullscreenWatcher.cs   前台窗口是否铺满整屏（全屏隐藏 + 截图覆盖层 + 开始菜单检测）
+├── Hid/HidNative.cs           HID 枚举（CM_* + HidD_*/HidP_GetCaps）与重叠读写（WriteFile/ReadFile）
+└── Settings/                  配置与系统集成
+    ├── AppSettings.cs         配置读写与规范化
+    └── AutoStart.cs           开机自启（写 HKCU …\CurrentVersion\Run）
 ```
 
 ## 版本
