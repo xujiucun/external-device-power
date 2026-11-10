@@ -14,6 +14,7 @@ internal sealed class StripSurfaceRenderer
     private readonly TaskbarStrip _strip;
     private Size _arranged;
     private bool _laidOut;
+    private RenderTargetBitmap _bitmap;
 
     public StripSurfaceRenderer(TaskbarStrip strip) => _strip = strip;
 
@@ -43,15 +44,27 @@ internal sealed class StripSurfaceRenderer
         SnapGlyphs(root);
         int width = Math.Max(1, (int)Math.Ceiling(desired.Width * scale));
         int height = Math.Max(1, (int)Math.Ceiling(desired.Height * scale));
+        double dpi = 96 * scale;
 
-        var bitmap = new RenderTargetBitmap(width, height, 96 * scale, 96 * scale, PixelFormats.Pbgra32);
-        bitmap.Render(root);
+        // 复用同一块位图：每帧新建 RenderTargetBitmap 会不断产生原生/GDI 资源，
+        // 只能等 GC 终结才释放（实测 4Hz 时 GDI 每秒涨 2 个）。
+        if (_bitmap == null || _bitmap.PixelWidth != width || _bitmap.PixelHeight != height ||
+            Math.Abs(_bitmap.DpiX - dpi) > 0.1)
+        {
+            _bitmap = new RenderTargetBitmap(width, height, dpi, dpi, PixelFormats.Pbgra32);
+        }
+        else
+        {
+            _bitmap.Clear();
+        }
+
+        _bitmap.Render(root);
 
         int stride = width * 4;
         int length = stride * height;
         if (Pixels.Length < length) Pixels = new byte[length];
 
-        bitmap.CopyPixels(Pixels, stride, 0);
+        _bitmap.CopyPixels(Pixels, stride, 0);
 
         PixelWidth = width;
         PixelHeight = height;

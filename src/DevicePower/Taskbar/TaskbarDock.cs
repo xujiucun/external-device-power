@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -36,6 +38,13 @@ internal sealed class TaskbarDock : IDisposable
     private bool _composition;
     private StripTooltipWindow _tooltip;
     private DispatcherTimer _tooltipDelay;
+
+    /// <summary>电量条内容是否变了；只有变过才重画，250ms 定时器只负责跟随任务栏。</summary>
+    private bool _stripDirty = true;
+
+    private readonly HashSet<DeviceRow> _watchedRows = new();
+    private long _overlayCheckedTick;
+    private string _overlayCache;
     private double _lastScale = 1;
     private readonly AutoResetEvent _guardSignal = new(false);
     private Thread _guardThread;
@@ -88,6 +97,15 @@ internal sealed class TaskbarDock : IDisposable
                 MenuRequested?.Invoke();
             };
             _compositionHost.HoverChanged += OnStripHover;
+
+            // 内容变化才重画：读数、名称、充电/休眠、外观互换都会落到这里
+            _monitor.Rows.CollectionChanged += (_, _) =>
+            {
+                WatchRows();
+                _stripDirty = true;
+            };
+            _monitor.Look.PropertyChanged += (_, _) => _stripDirty = true;
+            WatchRows();
 
             // 悬停 500ms 再弹提示，划过去不打扰
             _tooltip = new StripTooltipWindow();
@@ -417,21 +435,37 @@ internal sealed class TaskbarDock : IDisposable
         // 电量条现在是任务栏的子窗口，任务栏被全屏应用盖住/自动隐藏时它也一起消失，
         // 这里不再自己做全屏判定；「全屏时」开关只留给浮动面板和原生渲染不可用时的回退窗口。
         double scale = GetDpiForWindow(taskbar) / 96.0;
+        bool scaleChanged = Math.Abs(scale - _lastScale) > 0.001;
         _lastScale = scale;
         _monitor.Look.SetStripLimit((tb.Bottom - tb.Top) / scale, _monitor.Rows.Count >= 2 ? 2 : 1);
 
-        if (!_surface.Render(scale))
+        bool rendered = false;
+        if (_stripDirty || scaleChanged)
         {
-            _compositionHost.Hide();
-            _tooltip?.HideTip();
-            return;
+            if (!_surface.Render(scale))
+            {
+                _compositionHost.Hide();
+                _tooltip?.HideTip();
+                return;
+            }
+
+            _stripDirty = false;
+            rendered = true;
         }
 
         int width = _surface.PixelWidth;
         int height = _surface.PixelHeight;
         if (width <= 0 || height <= 0) return;
 
-        string overlay = FullscreenWatcher.OverlayReason(_compositionHost.Hwnd);
+        // 覆盖层判定要开进程句柄、查窗口类名，没必要 4Hz 做，500ms 一次足够冻结位置
+        long now = Environment.TickCount64;
+        if (now - _overlayCheckedTick >= 500)
+        {
+            _overlayCache = FullscreenWatcher.OverlayReason(_compositionHost.Hwnd);
+            _overlayCheckedTick = now;
+        }
+
+        string overlay = _overlayCache;
         if (overlay != null)
             DiagLog.WriteIfChanged("overlay", "composition position frozen by " + overlay);
 
@@ -450,15 +484,23 @@ internal sealed class TaskbarDock : IDisposable
             }
         }
 
-        if (!_compositionHost.Update(taskbar, _targetLeft, _targetTop, width, height) ||
-            !_compositionHost.Upload(_surface.Pixels, width, height, _surface.Stride))
+        IntPtr previous = _compositionHost.Hwnd;
+        if (!_compositionHost.Update(taskbar, _targetLeft, _targetTop, width, height))
         {
             DisableComposition("update failed");
             return;
         }
 
-        // 提示已经显示时跟着更新内容和位置
-        if (_tooltip != null && _tooltip.IsVisible) ShowStripTooltip();
+        // 位置/尺寸由 DComp 自己搬窗口，不用重传像素；只有重画过或窗口/交换链重建才上传
+        if ((rendered || _compositionHost.Hwnd != previous) &&
+            !_compositionHost.Upload(_surface.Pixels, width, height, _surface.Stride))
+        {
+            DisableComposition("upload failed");
+            return;
+        }
+
+        // 提示内容跟着电量走，内容没变就不用每 250ms 重新布局一次
+        if (rendered && _tooltip != null && _tooltip.IsVisible) ShowStripTooltip();
     }
 
     /// <summary>
@@ -504,6 +546,25 @@ internal sealed class TaskbarDock : IDisposable
 
         return text.ToString();
     }
+
+    /// <summary>盯住当前显示中的设备行，任何属性变化都标记电量条需要重画。</summary>
+    private void WatchRows()
+    {
+        foreach (DeviceRow row in _monitor.Rows)
+        {
+            if (!_watchedRows.Add(row)) continue;
+            row.PropertyChanged += OnRowPropertyChanged;
+        }
+
+        _watchedRows.RemoveWhere(row =>
+        {
+            if (_monitor.Rows.Contains(row)) return false;
+            row.PropertyChanged -= OnRowPropertyChanged;
+            return true;
+        });
+    }
+
+    private void OnRowPropertyChanged(object sender, PropertyChangedEventArgs e) => _stripDirty = true;
 
     private void OnStripHover(bool hover)
     {
