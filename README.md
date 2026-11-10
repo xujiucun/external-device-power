@@ -10,8 +10,8 @@ Windows 托盘小工具：直接在任务栏里显示无线键盘 / 鼠标的电
 
 | 包 | 大小 | 说明 |
 | --- | --- | --- |
-| `DevicePower-win-x64.zip` | 117 KB（解压后 470 KB） | 体积小，但**要先装 .NET 桌面运行时**（见下面「运行要求」） |
-| `DevicePower-win-x64-selfcontained.zip` | 66.8 MB（解压后 162 MB） | 运行时打包在内，解压即用，什么都不用装 |
+| `DevicePower-win-x64.zip` | 124 KB（解压后 475 KB） | 体积小，但**要先装 .NET 桌面运行时**（见下面「运行要求」） |
+| `DevicePower-win-x64-selfcontained.zip` | 66.8 MB（解压后 160 MB） | 运行时打包在内，解压即用，什么都不用装 |
 
 两个包里都有一层同名目录，解压后进那个目录双击 `DevicePower.exe`。
 
@@ -80,13 +80,13 @@ dotnet build src/DevicePower/DevicePower.csproj
 dotnet run --project src/DevicePower/DevicePower.csproj
 ```
 
-免安装分发（框架依赖，约 470KB；**目标机需按上面“运行要求”先装 .NET 桌面运行时**）：
+免安装分发（框架依赖，约 475KB；**目标机需按上面“运行要求”先装 .NET 桌面运行时**）：
 
 ```bash
 dotnet publish src/DevicePower/DevicePower.csproj -c Release -r win-x64 --self-contained false -o publish
 ```
 
-想彻底免装运行时（解压后 162 MB，压成 zip 约 67 MB，直接双击就能跑）：
+想彻底免装运行时（解压后 160 MB，压成 zip 约 67 MB，直接双击就能跑）：
 
 ```bash
 dotnet publish src/DevicePower/DevicePower.csproj -c Release -r win-x64 --self-contained true -o publish-selfcontained
