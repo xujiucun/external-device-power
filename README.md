@@ -10,7 +10,7 @@ Windows 托盘小工具：直接在任务栏里显示无线键盘 / 鼠标的电
 
 | 包 | 大小 | 说明 |
 | --- | --- | --- |
-| `DevicePower-win-x64.zip` | 124 KB（解压后 475 KB） | 体积小，但**要先装 .NET 桌面运行时**（见下面「运行要求」） |
+| `DevicePower-win-x64.zip` | 135 KB（解压后 572 KB） | 体积小，但**要先装 .NET 桌面运行时**（见下面「运行要求」） |
 | `DevicePower-win-x64-selfcontained.zip` | 66.8 MB（解压后 160 MB） | 运行时打包在内，解压即用，什么都不用装 |
 
 两个包里都有一层同名目录，解压后进那个目录双击 `DevicePower.exe`。
