@@ -167,6 +167,13 @@ public partial class SettingsWindow : Window
 
     private void OnRowsChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
+        // 设备拔出后会从 Catalog 移除，设置页里对应的行也要跟着消失
+        for (int i = _nameEdits.Count - 1; i >= 0; i--)
+        {
+            if (!_monitor.Catalog.Contains(_nameEdits[i].Row))
+                _nameEdits.RemoveAt(i);
+        }
+
         foreach (DeviceRow row in _monitor.Catalog)
         {
             if (_nameEdits.Any(edit => ReferenceEquals(edit.Row, row))) continue;

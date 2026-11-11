@@ -26,6 +26,12 @@ public sealed class DeviceMonitor
     /// <summary>_present 的快照：轮询线程会改集合，界面只读快照。</summary>
     private volatile HashSet<string> _presentSnapshot = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 有线直连的罗技设备在线时，接收器里的同一只鼠标通常已经不应答（休眠）。
+    /// 这时把接收器那行藏起来，避免同一只鼠标同时显示“有线”和“接收器”两条。
+    /// </summary>
+    private volatile HashSet<string> _hiddenByDirect = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>整个进程只推一次上线通知：休眠唤醒、读数抖动都不再算新的连接。</summary>
     private readonly HashSet<string> _announced = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource _cts;
@@ -148,9 +154,11 @@ public sealed class DeviceMonitor
         int reads = 0;
         var cameOnline = new List<string>();
         var wentOffline = new List<string>();
+        var goneKeys = new List<string>();
         var asleepNow = new List<string>();
         bool presenceChanged = false;
         bool stateChanged = false;
+        bool hiddenChanged = false;
         HashSet<string> presentSnapshot;
         lock (_ioLock)
         {
@@ -227,11 +235,46 @@ public sealed class DeviceMonitor
                 presenceChanged = true;
             }
 
+            // 本轮完全没发现的设备（接收器拔掉、或数据线直连的设备已拔出）：
+            // 从设置列表和内部映射里移除；下次插回来会重新发现，名称仍从配置恢复。
+            foreach (string key in _knownKeys.Where(k => !seenKeys.Contains(k)).ToList())
+            {
+                _knownKeys.Remove(key);
+                goneKeys.Add(key);
+                presenceChanged = true;
+            }
+
             presentSnapshot = new HashSet<string>(_present, StringComparer.OrdinalIgnoreCase);
             _presentSnapshot = presentSnapshot;
+
+            // 直连（数据线）的罗技设备在线时，接收器里对应的那条多半已经休眠：藏起来去重
+            bool hasDirectLogitech = false;
+            foreach (string key in _present)
+            {
+                if (key.StartsWith("logi:", StringComparison.OrdinalIgnoreCase) &&
+                    key.EndsWith("#ff", StringComparison.OrdinalIgnoreCase))
+                {
+                    hasDirectLogitech = true;
+                    break;
+                }
+            }
+
+            var hidden = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (hasDirectLogitech)
+            {
+                foreach (string key in _asleep)
+                {
+                    if (key.StartsWith("logi:", StringComparison.OrdinalIgnoreCase) &&
+                        !key.EndsWith("#ff", StringComparison.OrdinalIgnoreCase))
+                        hidden.Add(key);
+                }
+            }
+
+            hiddenChanged = !_hiddenByDirect.SetEquals(hidden);
+            _hiddenByDirect = hidden;
         }
 
-        if (presenceChanged || stateChanged)
+        if (presenceChanged || stateChanged || hiddenChanged)
         {
             RunOnUi(() =>
             {
@@ -249,6 +292,18 @@ public sealed class DeviceMonitor
                     {
                         ClearReading(key);
                         DiagLog.WriteIfChanged("offline", $"{key} 已离线，从界面移除");
+                    }
+                }
+
+                if (goneKeys.Count > 0)
+                {
+                    // 设备已不在本机：从设置页的设备列表里也移除，避免残留旧设备
+                    foreach (string key in goneKeys)
+                    {
+                        if (!_rows.TryGetValue(key, out DeviceRow row)) continue;
+                        _rows.Remove(key);
+                        Catalog.Remove(row);
+                        DiagLog.WriteIfChanged("offline", $"{key} 已拔出，从设置列表移除");
                     }
                 }
 
@@ -333,7 +388,7 @@ public sealed class DeviceMonitor
     {
         Rows.Clear();
         foreach (DeviceRow row in Catalog)
-            if (present.Contains(row.Key) && !IsHidden(row.Key))
+            if (present.Contains(row.Key) && !IsHidden(row.Key) && !_hiddenByDirect.Contains(row.Key))
                 Rows.Add(row);
 
         RebuildColumns();

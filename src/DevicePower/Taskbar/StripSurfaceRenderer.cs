@@ -12,8 +12,6 @@ namespace DevicePower.Taskbar;
 internal sealed class StripSurfaceRenderer
 {
     private readonly TaskbarStrip _strip;
-    private Size _arranged;
-    private bool _laidOut;
     private RenderTargetBitmap _bitmap;
 
     public StripSurfaceRenderer(TaskbarStrip strip) => _strip = strip;
@@ -34,12 +32,9 @@ internal sealed class StripSurfaceRenderer
         Size desired = root.DesiredSize;
         if (desired.Width < 1 || desired.Height < 1) return false;
 
-        if (!_laidOut || desired != _arranged)
-        {
-            root.Arrange(new Rect(desired));
-            _arranged = desired;
-            _laidOut = true;
-        }
+        // 即使尺寸没变也要 Arrange：Columns 重建、字号绑定更新后子树可能是待排版状态，
+        // 只 Measure 不 Arrange 会把空的内容画出来（实测改字号后整条变空白）。
+        root.Arrange(new Rect(desired));
 
         SnapGlyphs(root);
         int width = Math.Max(1, (int)Math.Ceiling(desired.Width * scale));

@@ -43,14 +43,16 @@ public sealed class DisplayLook : INotifyPropertyChanged
     public AppSettings Settings { get; }
 
     /// <summary>由 TaskbarDock 回填任务栏可用高度（DIP）和一列几行，变了才重算。</summary>
-    public void SetStripLimit(double availableDip, int rows)
+    /// <returns>true 表示本次重算了外观，调用方应等绑定更新后再重画。</returns>
+    public bool SetStripLimit(double availableDip, int rows)
     {
         rows = Math.Clamp(rows, 1, 2);
-        if (rows == _stripRows && Math.Abs(availableDip - _stripAvailableDip) < 0.5) return;
+        if (rows == _stripRows && Math.Abs(availableDip - _stripAvailableDip) < 0.5) return false;
 
         _stripAvailableDip = availableDip;
         _stripRows = rows;
         Refresh();
+        return true;
     }
 
     /// <summary>设备名列表变了要重新量列宽，否则名字列会按旧名字留白或截断。</summary>

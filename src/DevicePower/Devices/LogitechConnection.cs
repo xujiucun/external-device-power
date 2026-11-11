@@ -29,6 +29,9 @@ internal sealed class LogitechConnection : HidDeviceConnection
     private const int WakeDeadlineMs = 1100;
     private const int ScanBudgetMs = 3600;
     private const byte MaxScanIndex = 4;
+
+    /// <summary>数据线直连的设备用 0xFF 作为设备号；接收器配对设备用 1–4。</summary>
+    private const byte DirectIndex = 0xFF;
     private const int RescanDelayMs = 30000;
 
     private readonly List<DeviceDescriptor> _devices = new();
@@ -58,6 +61,26 @@ internal sealed class LogitechConnection : HidDeviceConnection
         Drain(stream, 40);
 
         long deadline = now + ScanBudgetMs;
+
+        // 数据线直连时设备号是 0xFF；不少型号对 1–4 也会回包（实测 PRO X 2），
+        // 所以先探 0xFF：有应答就只算一台，避免同一只鼠标被识别成多台。
+        if (Ping(stream, DirectIndex, WakeDeadlineMs))
+        {
+            // 有线直连的鼠标不一定带电池（如 G502 HERO）：确认电量 feature 存在再登记
+            if (!ResolveBatteryFeature(stream, DirectIndex, out byte feature, out byte function))
+                return _devices;
+
+            _features[DirectIndex] = feature;
+            _functions[DirectIndex] = function;
+
+            _devices.Add(new DeviceDescriptor(
+                $"logi:{Collection.Vid:X4}:{Collection.Pid:X4}#ff",
+                "logitech",
+                DefaultName(DirectIndex),
+                DirectIndex));
+            return _devices;
+        }
+
         for (byte slot = 1; slot <= MaxScanIndex; slot++)
         {
             int left = (int)(deadline - Environment.TickCount64);
@@ -94,7 +117,14 @@ internal sealed class LogitechConnection : HidDeviceConnection
         int level = response[4];
         if (level > 100) return null;
 
-        return new BatteryReading(level, (response[5] & 0x02) != 0);
+        // 两种电量 feature 的状态字位置不同：
+        //   0x1000 function 0：response[5] 是 BatteryStatus 枚举（1 充电 / 2 收尾 / 3 充满 / 4 慢充）
+        //   0x1004 function 1：response[5] 是电量等级位，response[6] 才是 ChargingStatus 枚举
+        bool charging = function == FuncBatteryLevel
+            ? response[6] >= 1 && response[6] <= 3
+            : response[5] >= 1 && response[5] <= 4;
+
+        return new BatteryReading(level, charging);
     }
 
     private static bool ResolveBatteryFeature(HidStream stream, byte slot, out byte feature, out byte function)
@@ -130,7 +160,7 @@ internal sealed class LogitechConnection : HidDeviceConnection
 
         string name = generic ? "罗技设备" : product;
         if (name.Length > 24) name = name[..24];
-        return slot > 1 ? $"{name} {slot}" : name;
+        return slot > 1 && slot != DirectIndex ? $"{name} {slot}" : name;
     }
 
     private static bool Ping(HidStream stream, byte slot, int deadlineMs)

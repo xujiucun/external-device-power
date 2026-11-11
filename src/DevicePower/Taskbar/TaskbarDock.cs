@@ -139,7 +139,9 @@ internal sealed class TaskbarDock : IDisposable
 
         if (_composition)
         {
-            UpdateComposition();
+            // 不能在这里同步重画：应用设置时 Look 的绑定还在 DataBind 队列里，
+            // 这时量到的还是旧字号、旧列，画出来就是空白或旧内容。交给下一个 250ms tick。
+            _stripDirty = true;
             if (!_timer.IsEnabled) _timer.Start();
             return;
         }
@@ -437,10 +439,13 @@ internal sealed class TaskbarDock : IDisposable
         double scale = GetDpiForWindow(taskbar) / 96.0;
         bool scaleChanged = Math.Abs(scale - _lastScale) > 0.001;
         _lastScale = scale;
-        _monitor.Look.SetStripLimit((tb.Bottom - tb.Top) / scale, _monitor.Rows.Count >= 2 ? 2 : 1);
+
+        // 行数/可用高度变化会重算字号和行高，但绑定要到下一轮 DataBind 才落地，先跳过这一拍
+        bool limitChanged = _monitor.Look.SetStripLimit((tb.Bottom - tb.Top) / scale,
+            _monitor.Rows.Count >= 2 ? 2 : 1);
 
         bool rendered = false;
-        if (_stripDirty || scaleChanged)
+        if (!limitChanged && (_stripDirty || scaleChanged))
         {
             if (!_surface.Render(scale))
             {
